@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'manctrltest = boat_control.pub_controller:main' 
         ],
     },
 )

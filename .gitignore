@@ -1,0 +1,23 @@
+# ROS 2 build artifacts
+build/
+install/
+log/
+
+# Colcon-specific markers
+COLCON_IGNORE
+AMENT_IGNORE
+
+# Python-related files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Workspace-specific configuration
+.vscode/
+.idea/
+*.user
+
+# Generated documentation
+*.dox
+*.wikidoc
