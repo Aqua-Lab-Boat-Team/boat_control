@@ -54,7 +54,7 @@ SYS_STAT_INTERVAL = 0.1    # send status every 0.1 second
 # ============================================================
 mvl_armed = False
 mission_upload_active = False
-MissionUpload mission_upload = MissionUpload()
+mission_upload = MissionUpload()
 sys_stat_count = 0
 
 
@@ -106,15 +106,15 @@ def handle_param_request_list(_m: mavutil.mavlink.MAVLink_message, master: mavut
     """
     param_id = b"a_parm"
 
-    master.mav.param_value_send(
-        param_id=param_id,
-        param_value=123.456,
-        param_type=mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
-        param_count=1,
-        param_index=0
-        cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
-        mvl_armed = (int(m.param1) == 1)
-    )
+    # master.mav.param_value_send(
+    #     param_id=param_id,
+    #     param_value=123.456,
+    #     param_type=mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+    #     param_count=1,
+    #     param_index=0,
+    #     cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+    #     mvl_armed = (int(m.param1) == 1)
+    # )
 
 
 def handle_mission_request_list(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
@@ -146,7 +146,7 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
     if not mission_upload_active:
         mission_upload_active = True
         mission_upload.num_mission_items = _m.count
-        print(f"# Mission items: {mission_items}")
+        print(f"# Mission items: {mission_upload.num_mission_items}")
 
     send_mission_request_int(_m, master)
 
@@ -159,6 +159,7 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     Later this is where you may publish waypoint data to a dedicated ROS topic.
     """
     print(_m)
+    print("MISSION ITEM INTTTTTTTTTTT")
     send_mission_request_int(_m, master)
 
 
@@ -220,17 +221,17 @@ def send_mission_request_int(_m: mavutil.mavlink.MAVLink_message, master: mavuti
     When all items are received, we send mission ACK.
     """
     global mission_upload_active
-    global mission_items_idx
-    global mission_items
+    global mission_upload
+    
 
-    mission_items_idx += 1
+    mission_upload.current_mission_item += 1
 
-    if mission_items_idx < mission_items:
-        print(f"Mission item index: {mission_items_idx}")
+    if mission_upload.current_mission_item < mission_upload.num_mission_items:
+        print(f"Mission item index: {mission_upload.current_mission_item}")
         master.mav.mission_request_int_send(
             target_system=MVL_SYSID,
             target_component=MVL_COMPID,
-            seq=mission_items_idx
+            seq=mission_upload.current_mission_item
         )
     else:
         print("Accepting mission...")
@@ -240,8 +241,8 @@ def send_mission_request_int(_m: mavutil.mavlink.MAVLink_message, master: mavuti
             type=0
         )
         mission_upload_active = False
-        mission_items_idx = -1
-        mission_items = 0
+        
+        ## TODO: Reset to idle state
 
 
 # ============================================================
@@ -343,7 +344,7 @@ class MavlinkRosPublisher(Node):
         self.publisher_.publish(msg)
 
         # Also log it in the terminal from the ROS node side
-        self.get_logger().info(f"Published on /mavtopic: {msg.data}")
+        # self.get_logger().info(f"Published on /mavtopic: {msg.data}")
 
 
 # ============================================================
