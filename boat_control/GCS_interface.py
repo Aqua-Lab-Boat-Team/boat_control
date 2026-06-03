@@ -29,6 +29,7 @@ from std_msgs.msg import String
 # pymavlink helper library for MAVLink communication
 from pymavlink import mavutil
 
+from MissionUpload import MissionUpload
 
 # ============================================================
 #                    SYSTEM IDENTITY
@@ -53,8 +54,7 @@ SYS_STAT_INTERVAL = 0.1    # send status every 0.1 second
 # ============================================================
 mvl_armed = False
 mission_upload_active = False
-mission_items = -1
-mission_items_idx = -1
+MissionUpload mission_upload = MissionUpload()
 sys_stat_count = 0
 
 
@@ -112,6 +112,8 @@ def handle_param_request_list(_m: mavutil.mavlink.MAVLink_message, master: mavut
         param_type=mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
         param_count=1,
         param_index=0
+        cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+        mvl_armed = (int(m.param1) == 1)
     )
 
 
@@ -137,14 +139,13 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
     We store the count, mark upload as active, then request the first item.
     """
     global mission_upload_active
-    global mission_items_idx
-    global mission_items
+    global mission_upload
 
     print(_m)
 
     if not mission_upload_active:
         mission_upload_active = True
-        mission_items = _m.count
+        mission_upload.num_mission_items = _m.count
         print(f"# Mission items: {mission_items}")
 
     send_mission_request_int(_m, master)
@@ -372,7 +373,7 @@ def main() -> None:
     # Open MAVLink connection
     # Change this URI later if needed for serial, e.g. /dev/ttyUSB0
     master = mavutil.mavlink_connection(
-        "udpout:192.168.10.2:14550",
+        "udpout:192.168.55.100:14550",
         source_system=MVL_SYSID,
         source_component=MVL_COMPID
     )
@@ -410,8 +411,8 @@ def main() -> None:
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
                         handle_param_request_list(m, master)
 
-                    elif mid == mavutil.mavlink.MAVLINK_MSG_ID_COMMAND_LONG:
-                        handle_command_long(m, master)
+                    # elif mid == mavutil.mavlink.MAVLINK_MSG_ID_COMMAND_LONG:
+                    #     handle_command_long(m, master)
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
                         handle_mission_request_list(m, master)
@@ -420,8 +421,10 @@ def main() -> None:
                         # We ignore incoming heartbeat for now
                         pass
 
+                    # CMD_NAV_* should be embedded here. Use this instead of the explicit command_long_handler
+                    # If waypoints stop working, this is probably why
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_ITEM_INT:
-                        handle_mission_item_int(m, master)
+                        handle_mission_item_int(m, master) 
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                         handle_mission_count(m, master)
