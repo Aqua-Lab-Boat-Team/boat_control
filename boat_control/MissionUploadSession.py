@@ -1,4 +1,4 @@
-class MissionUpload:
+class MissionUploadSession:
     def __init__(self):
         self.mission_type = 0
         self.num_mission_items = 0

@@ -29,7 +29,7 @@ from std_msgs.msg import String
 # pymavlink helper library for MAVLink communication
 from pymavlink import mavutil
 
-from MissionUpload import MissionUpload
+from MissionUploadSession import MissionUploadSession
 
 # ============================================================
 #                    SYSTEM IDENTITY
@@ -54,7 +54,7 @@ SYS_STAT_INTERVAL = 0.1    # send status every 0.1 second
 # ============================================================
 mvl_armed = False
 mission_upload_active = False
-mission_upload = MissionUpload()
+mission_upload_sess = MissionUploadSession()
 sys_stat_count = 0
 
 
@@ -124,11 +124,11 @@ def handle_mission_request_list(_m: mavutil.mavlink.MAVLink_message, master: mav
     For now, this sends a request for mission item index 0.
     This keeps your original behavior.
     """
-    master.mav.mission_request_int_send(
-        target_system=MVL_SYSID,
-        target_component=MVL_COMPID,
-        seq=0
-    )
+    # master.mav.mission_request_int_send(
+    #     target_system=MVL_SYSID,
+    #     target_component=MVL_COMPID,
+    #     seq=0
+    # )
 
 
 def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
@@ -139,16 +139,17 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
     We store the count, mark upload as active, then request the first item.
     """
     global mission_upload_active
-    global mission_upload
+    global mission_upload_sess
 
     print(_m)
 
     if not mission_upload_active:
         mission_upload_active = True
-        mission_upload.num_mission_items = _m.count
-        print(f"# Mission items: {mission_upload.num_mission_items}")
+        mission_upload_sess.num_mission_items = _m.count
+        print(f"# Mission items: {mission_upload_sess.num_mission_items}")
 
     send_mission_request_int(_m, master)
+    mission_upload_sess.current_mission_item += 1
 
 
 def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
@@ -158,9 +159,13 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     Right now, we only print it and request the next mission item.
     Later this is where you may publish waypoint data to a dedicated ROS topic.
     """
+
+    global mission_upload_active
+    global mission_upload_sess
+
     print(_m)
-    print("MISSION ITEM INTTTTTTTTTTT")
     send_mission_request_int(_m, master)
+    mission_upload_sess.current_mission_item += 1
 
 
 def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
@@ -207,11 +212,11 @@ def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavf
         )
 
     # Waypoint/nav command received
-    elif cmd == mavutil.mavlink.MAV_CMD_NAV_WAYPOINT:
-        print("WAYPOINT COMMAND RECEIVED")
+    # elif cmd == mavutil.mavlink.MAV_CMD_NAV_WAYPOINT:
+    #     print("WAYPOINT COMMAND RECEIVED")
 
-    else:
-        print("OTHER CMD RECEIVED")
+    # else:
+    #     print("OTHER CMD RECEIVED")
 
 
 def send_mission_request_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
@@ -221,18 +226,18 @@ def send_mission_request_int(_m: mavutil.mavlink.MAVLink_message, master: mavuti
     When all items are received, we send mission ACK.
     """
     global mission_upload_active
-    global mission_upload
+    global mission_upload_sess
     
-
-    mission_upload.current_mission_item += 1
-
-    if mission_upload.current_mission_item < mission_upload.num_mission_items:
-        print(f"Mission item index: {mission_upload.current_mission_item}")
+    # If we haven't seen all the items yet, ask for the next
+    if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items:
+        print(f"REQUESTING {mission_upload_sess.current_mission_item}")
         master.mav.mission_request_int_send(
             target_system=MVL_SYSID,
             target_component=MVL_COMPID,
-            seq=mission_upload.current_mission_item
+            seq=mission_upload_sess.current_mission_item
         )
+        
+    # If we have seen everything, acknowledge the mission transmission
     else:
         print("Accepting mission...")
         master.mav.mission_ack_send(
@@ -412,8 +417,8 @@ def main() -> None:
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
                         handle_param_request_list(m, master)
 
-                    # elif mid == mavutil.mavlink.MAVLINK_MSG_ID_COMMAND_LONG:
-                    #     handle_command_long(m, master)
+                    elif mid == mavutil.mavlink.MAVLINK_MSG_ID_COMMAND_LONG:
+                        handle_command_long(m, master)
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
                         handle_mission_request_list(m, master)
@@ -429,7 +434,7 @@ def main() -> None:
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                         handle_mission_count(m, master)
-
+                    
                     else:
                         # Print unknown/unhandled message IDs
                         print(mid)
