@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'manctrltest = boat_control.pub_controller:main' 
+            'manctrltest = boat_control.pub_controller:main',
+            'mission_manager = boat_control.mission_manager:main'
         ],
     },
 )

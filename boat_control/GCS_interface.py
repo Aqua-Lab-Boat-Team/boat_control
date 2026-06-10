@@ -148,8 +148,7 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
         mission_upload_sess.num_mission_items = _m.count
         print(f"# Mission items: {mission_upload_sess.num_mission_items}")
 
-    send_mission_request_int(_m, master)
-    mission_upload_sess.current_mission_item += 1
+    send_mission_request_int(master)
 
 
 def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
@@ -163,10 +162,22 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     global mission_upload_active
     global mission_upload_sess
 
+    # Process the mission item
     print(_m)
-    send_mission_request_int(_m, master)
-    mission_upload_sess.current_mission_item += 1
+    mission_upload_sess.retry_count = 0
+    mission_upload_sess.is_waiting = False
 
+    # If we haven't seen everything yet, ask for the next item
+    if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items-1:
+        mission_upload_sess.current_mission_item += 1
+        send_mission_request_int(master)
+        
+    
+    # If we've seen everything, request the next item
+    else:
+        send_mission_ack(_m, master)
+        mission_upload_active = False
+    
 
 def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
     """
@@ -219,37 +230,30 @@ def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavf
     #     print("OTHER CMD RECEIVED")
 
 
-def send_mission_request_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
+def send_mission_request_int(master: mavutil.mavfile):
     """
     Requests mission items one by one from QGC.
-
-    When all items are received, we send mission ACK.
     """
     global mission_upload_active
     global mission_upload_sess
     
     # If we haven't seen all the items yet, ask for the next
-    if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items:
-        print(f"REQUESTING {mission_upload_sess.current_mission_item}")
-        master.mav.mission_request_int_send(
-            target_system=MVL_SYSID,
-            target_component=MVL_COMPID,
-            seq=mission_upload_sess.current_mission_item
-        )
-        
-    # If we have seen everything, acknowledge the mission transmission
-    else:
-        print("Accepting mission...")
-        master.mav.mission_ack_send(
+    print(f"REQUESTING {mission_upload_sess.current_mission_item}")
+    master.mav.mission_request_int_send(
+        target_system=MVL_SYSID,
+        target_component=MVL_COMPID,
+        seq=mission_upload_sess.current_mission_item
+    )
+    mission_upload_sess.is_waiting = True # Flag that mission upload is awaiting a response
+    mission_upload_sess.t_last_transmit = millis()
+
+
+def send_mission_ack(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
+    master.mav.mission_ack_send(
             target_system=MVL_SYSID,
             target_component=MVL_COMPID,
             type=0
         )
-        mission_upload_active = False
-        
-        ## TODO: Reset to idle state
-
-
 # ============================================================
 #              PERIODIC OUTGOING MAVLINK MESSAGES
 # ============================================================
@@ -449,6 +453,19 @@ def main() -> None:
             if (t - t_last_sys) >= SYS_STAT_INTERVAL:
                 send_sys_status_and_att(master)
                 t_last_sys = t
+
+            # Retry message transmit
+            # if (mission_upload_sess.is_waiting):
+            #     if (millis() - mission_upload_sess.t_last_transmit > mission_upload_sess.request_timeout_ms):
+            #         if (mission_upload_sess.retry_count < mission_upload_sess.max_retry):
+            #             print("RETRANSMIT")
+            #             send_mission_request_int(master)
+            #             mission_upload_sess.retry_count += 1
+            #         else:
+            #             print("MISSION UPLOAD TIMEOUT")
+            #             ## Mission upload is dead
+
+                        
 
             # Small sleep to avoid maxing CPU
             time.sleep(0.002)
