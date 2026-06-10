@@ -30,6 +30,7 @@ from std_msgs.msg import String
 from pymavlink import mavutil
 
 from MissionUploadSession import MissionUploadSession
+from MissionItem import MissionItem
 
 # ============================================================
 #                    SYSTEM IDENTITY
@@ -56,7 +57,6 @@ mvl_armed = False
 mission_upload_active = False
 mission_upload_sess = MissionUploadSession()
 sys_stat_count = 0
-
 
 # ============================================================
 #                    TIME HELPER FUNCTIONS
@@ -166,14 +166,15 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     print(_m)
     mission_upload_sess.retry_count = 0
     mission_upload_sess.is_waiting = False
+    mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
+    mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
 
     # If we haven't seen everything yet, ask for the next item
-    if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items-1:
+    if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items - 1:
         mission_upload_sess.current_mission_item += 1
         send_mission_request_int(master)
         
-    
-    # If we've seen everything, request the next item
+    # If we've seen everything, acknowledge the mission and process it
     else:
         send_mission_ack(_m, master)
         mission_upload_active = False

@@ -1,3 +1,5 @@
+from MissionItem import MissionItem
+
 class MissionUploadSession:
     def __init__(self):
         self.mission_type = 0
@@ -9,3 +11,9 @@ class MissionUploadSession:
         self.is_waiting = False
         self.t_last_transmit = 0
         self.mission_item_list = []
+
+    def add_mission_item(self, mission_item: MissionItem):
+        self.mission_item_list.append(mission_item)
+
+
+    
