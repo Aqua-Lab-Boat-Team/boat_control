@@ -1,4 +1,4 @@
-from MissionItem import MissionItem
+from boat_control.MissionItem import MissionItem
 
 class MissionUploadSession:
     def __init__(self):

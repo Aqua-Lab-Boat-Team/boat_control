@@ -23,14 +23,17 @@ from builtins import getattr
 # Base class for creating a ROS 2 node in Python
 from rclpy.node import Node
 
-# Standard ROS 2 message type containing a single string field: data
+# Message Type Imports
 from std_msgs.msg import String
+from boat_iface.msg import MissionItemInt
 
 # pymavlink helper library for MAVLink communication
 from pymavlink import mavutil
 
-from MissionUploadSession import MissionUploadSession
-from MissionItem import MissionItem
+# Local Imports
+from boat_control.MissionUploadSession import MissionUploadSession
+from boat_control.MissionItem import MissionItem
+from boat_control.mission_item_publisher import MissionItemPublisher
 
 # ============================================================
 #                    SYSTEM IDENTITY
@@ -151,7 +154,7 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
     send_mission_request_int(master)
 
 
-def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
+def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile, mission_item_publisher: MissionItemPublisher):
     """
     Handles one MISSION_ITEM_INT from QGC.
 
@@ -178,7 +181,10 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     else:
         send_mission_ack(_m, master)
         mission_upload_active = False
-    
+        # Broadcast complete mission upload to mission manager
+        for item in mission_upload_sess.mission_item_list:
+            mission_item_publisher.publish(item)
+
 
 def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
     """
@@ -199,6 +205,7 @@ def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavf
             capabilities = 0
             capabilities |= mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_SET_ATTITUDE_TARGET
             capabilities |= mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_MAVLINK2
+            capabilities |= mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_MISSION_FENCE
 
             master.mav.autopilot_version_send(
                 capabilities=capabilities,
@@ -316,47 +323,6 @@ def send_sys_status_and_att(master: mavutil.mavfile) -> None:
         yawspeed=0.0
     )
 
-
-# ============================================================
-#                    ROS 2 NODE DEFINITION
-# ============================================================
-class MavlinkRosPublisher(Node):
-    """
-    A very simple ROS 2 node that publishes MAVLink messages
-    on the /mavtopic topic as std_msgs/String.
-    """
-
-    def __init__(self):
-        # Name of this ROS 2 node
-        super().__init__('mavlink_ros_publisher')
-
-        # Create a publisher on topic /mavtopic
-        # Queue size = 10 means ROS buffers up to 10 outgoing messages
-        self.publisher_ = self.create_publisher(String, '/mavtopic', 10)
-
-    def publish_mavlink_message(self, m: mavutil.mavlink.MAVLink_message):
-        """
-        Convert the received MAVLink message into a human-readable string
-        and publish it on /mavtopic.
-        """
-        msg = String()
-
-        # Build a readable string using message type, id, source, and full payload
-        msg.data = (
-            f"type={m.get_type()}, "
-            f"msgid={m.get_msgId()}, "
-            f"src_sys={m.get_srcSystem()}, "
-            f"src_comp={m.get_srcComponent()}, "
-            f"payload={m.to_dict()}"
-        )
-
-        # Publish the ROS 2 message
-        self.publisher_.publish(msg)
-
-        # Also log it in the terminal from the ROS node side
-        # self.get_logger().info(f"Published on /mavtopic: {msg.data}")
-
-
 # ============================================================
 #                        MAIN FUNCTION
 # ============================================================
@@ -379,7 +345,7 @@ def main() -> None:
     rclpy.init()
 
     # Create our publisher node
-    ros_node = MavlinkRosPublisher()
+    mission_item_publisher = MissionItemPublisher()
 
     # Open MAVLink connection
     # Change this URI later if needed for serial, e.g. /dev/ttyUSB0
@@ -399,7 +365,7 @@ def main() -> None:
 
             # Let ROS process callbacks once without blocking
             # Since this example only publishes, this is light-weight
-            rclpy.spin_once(ros_node, timeout_sec=0.0)
+            rclpy.spin_once(mission_item_publisher, timeout_sec=0.0)
 
             # Try to receive one MAVLink message without blocking
             m = master.recv_match(blocking=False)
@@ -409,9 +375,6 @@ def main() -> None:
                 # Only process messages coming from QGC
                 if m.get_srcSystem() == GCS_SYSID:
 
-                    # NEW PART:
-                    # Publish every received MAVLink message to ROS topic /mavtopic
-                    ros_node.publish_mavlink_message(m)
 
                     # Continue your existing MAVLink handling logic
                     mid = m.get_msgId()
@@ -432,10 +395,8 @@ def main() -> None:
                         # We ignore incoming heartbeat for now
                         pass
 
-                    # CMD_NAV_* should be embedded here. Use this instead of the explicit command_long_handler
-                    # If waypoints stop working, this is probably why
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_ITEM_INT:
-                        handle_mission_item_int(m, master) 
+                        handle_mission_item_int(m, master, mission_item_publisher) 
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                         handle_mission_count(m, master)
@@ -456,17 +417,15 @@ def main() -> None:
                 t_last_sys = t
 
             # Retry message transmit
-            # if (mission_upload_sess.is_waiting):
-            #     if (millis() - mission_upload_sess.t_last_transmit > mission_upload_sess.request_timeout_ms):
-            #         if (mission_upload_sess.retry_count < mission_upload_sess.max_retry):
-            #             print("RETRANSMIT")
-            #             send_mission_request_int(master)
-            #             mission_upload_sess.retry_count += 1
-            #         else:
-            #             print("MISSION UPLOAD TIMEOUT")
-            #             ## Mission upload is dead
-
-                        
+            if (mission_upload_sess.is_waiting):
+                if (millis() - mission_upload_sess.t_last_transmit > mission_upload_sess.request_timeout_ms):
+                    if (mission_upload_sess.retry_count < mission_upload_sess.max_retry):
+                        print("RETRANSMIT")
+                        send_mission_request_int(master)
+                        mission_upload_sess.retry_count += 1
+                    else:
+                        print("MISSION UPLOAD TIMEOUT")
+                        ## Mission upload is dead
 
             # Small sleep to avoid maxing CPU
             time.sleep(0.002)
@@ -477,7 +436,7 @@ def main() -> None:
 
     finally:
         # Cleanly destroy node and shutdown ROS
-        ros_node.destroy_node()
+        mission_item_publisher.destroy_node()
         rclpy.shutdown()
 
 
