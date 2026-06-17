@@ -11,17 +11,17 @@ class MissionManager(Node):
 
         self.subscriptions = []
         self.topics = [
-            (MissionItemInt, '/mission_item_int', self.mission_item_int_cb, 10),
+            (MissionItemInt, '/mission_items', self.mission_item_int_cb, 10),
         ]
 
         self.subscription = self.create_subscription(
             MissionItemInt,
-            '/mission_item_int',
+            '/mission_items',
             self.mission_item_int_cb,
             10)
 
     def mission_item_int_cb(self, msg: MissionItemInt):
-        self.get_logger().info(f'INT: {msg.seq}')
+        self.get_logger().info(f'GOT: {msg.seq}')
 
 def main(args=None):
     rclpy.init(args=args)

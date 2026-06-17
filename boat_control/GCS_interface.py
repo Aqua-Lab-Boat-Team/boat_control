@@ -166,7 +166,6 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     global mission_upload_sess
 
     # Process the mission item
-    print(_m)
     mission_upload_sess.retry_count = 0
     mission_upload_sess.is_waiting = False
     mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
@@ -327,20 +326,6 @@ def send_sys_status_and_att(master: mavutil.mavfile) -> None:
 #                        MAIN FUNCTION
 # ============================================================
 def main() -> None:
-    """
-    Main execution flow:
-
-    1. Start ROS 2
-    2. Create ROS 2 node
-    3. Open MAVLink connection
-    4. Continuously:
-       - process ROS callbacks
-       - receive MAVLink messages
-       - publish them to ROS
-       - handle MAVLink protocol logic
-       - send periodic heartbeat/status
-    """
-
     # Start ROS 2
     rclpy.init()
 
