@@ -27,13 +27,16 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from boat_iface.msg import MissionItemInt
 
+# Service Type Imports
+from boat_iface.srv import UploadMission
+
 # pymavlink helper library for MAVLink communication
 from pymavlink import mavutil
 
 # Local Imports
 from boat_control.MissionUploadSession import MissionUploadSession
 from boat_control.MissionItem import MissionItem
-from boat_control.mission_item_publisher import MissionItemPublisher
+from boat_control.mission_upload_client import MissionUploadClient
 
 # ============================================================
 #                    SYSTEM IDENTITY
@@ -154,12 +157,9 @@ def handle_mission_count(_m: mavutil.mavlink.MAVLink_message, master: mavutil.ma
     send_mission_request_int(master)
 
 
-def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile, mission_item_publisher: MissionItemPublisher):
+def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile, mission_upload_client: MissionUploadClient):
     """
     Handles one MISSION_ITEM_INT from QGC.
-
-    Right now, we only print it and request the next mission item.
-    Later this is where you may publish waypoint data to a dedicated ROS topic.
     """
 
     global mission_upload_active
@@ -180,9 +180,17 @@ def handle_mission_item_int(_m: mavutil.mavlink.MAVLink_message, master: mavutil
     else:
         send_mission_ack(_m, master)
         mission_upload_active = False
-        # Broadcast complete mission upload to mission manager
-        for item in mission_upload_sess.mission_item_list:
-            mission_item_publisher.publish(item)
+        
+        future = mission_upload_client.send_request(mission_upload_sess.mission_item_list)
+
+        rclpy.spin_until_future_complete(mission_upload_client, future)
+
+        response = future.result()
+
+        if response.success:
+            mission_upload_client.get_logger().info(f"Mission upload succeeded: {response.success}")
+        else:
+            mission_upload_client.get_logger().error(f"Mission upload failed: {response.success}")
 
 
 def handle_command_long(m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
@@ -329,8 +337,8 @@ def main() -> None:
     # Start ROS 2
     rclpy.init()
 
-    # Create our publisher node
-    mission_item_publisher = MissionItemPublisher()
+    # Create mission upload client
+    mission_upload_client = MissionUploadClient()
 
     # Open MAVLink connection
     # Change this URI later if needed for serial, e.g. /dev/ttyUSB0
@@ -349,8 +357,6 @@ def main() -> None:
         while rclpy.ok():
 
             # Let ROS process callbacks once without blocking
-            # Since this example only publishes, this is light-weight
-            rclpy.spin_once(mission_item_publisher, timeout_sec=0.0)
 
             # Try to receive one MAVLink message without blocking
             m = master.recv_match(blocking=False)
@@ -381,7 +387,7 @@ def main() -> None:
                         pass
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_ITEM_INT:
-                        handle_mission_item_int(m, master, mission_item_publisher) 
+                        handle_mission_item_int(m, master, mission_upload_client) 
 
                     elif mid == mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                         handle_mission_count(m, master)
@@ -421,7 +427,7 @@ def main() -> None:
 
     finally:
         # Cleanly destroy node and shutdown ROS
-        mission_item_publisher.destroy_node()
+        mission_upload_client.destroy_node()
         rclpy.shutdown()
 
 

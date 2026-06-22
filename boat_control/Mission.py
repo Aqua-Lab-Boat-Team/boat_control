@@ -1,3 +1,4 @@
+from enum import Enum
 
 class MissionType(Enum):
     NAVIGATION = 1

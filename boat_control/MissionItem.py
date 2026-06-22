@@ -30,7 +30,7 @@ class MissionItem:
             param2 = _m.param2,
             param3 = _m.param3,
             param4 = _m.param4,
-            x=_m.x, # Conversion to GPS 
+            x=_m.x,
             y=_m.y,
             z=_m.z,
         )
