@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-barebones_mavlink_ros2.py
-
-Purpose:
-- Keep your existing MAVLink script working
-- Add a simple ROS 2 publisher
-- Publish every MAVLink message received from QGC on a ROS 2 topic: /mavtopic
-
-This is meant to be the FIRST step only.
-No action server yet.
-No custom ROS messages yet.
-Just simple publishing so you can verify MAVLink -> ROS 2 flow.
-"""
 
 # Standard Python module for time handling
 import time
@@ -43,8 +30,6 @@ from boat_control.data.comms_config import CommsConfig
 #                      GLOBAL STATE
 # ============================================================
 mvl_armed = False
-mission_upload_active = False
-mission_upload_sess = MissionUploadSession()
 sys_stat_count = 0
 
 def now_s() -> float:
@@ -53,8 +38,7 @@ def now_s() -> float:
     Monotonic means it always moves forward and is safe for interval timing.
     """
     return time.monotonic()
-
-
+    
 def millis() -> int:
     """
     Returns monotonic time in milliseconds.
@@ -87,8 +71,9 @@ class GCSInterface(Node):
             mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                 self.handle_mission_count,
         }
-        self.mission_upload_client = MissionUploadClient()
-
+        self.mission_upload_sess = MissionUploadSession() # Store state relevant to current mission upload
+        self.mission_upload_client = MissionUploadClient() # Client for sending complete mission to mission manager
+        
         self.t_last_hb = now_s()
         self.t_last_sys = now_s()
         self.timer = self.create_timer(0.01, self.loop)
@@ -110,7 +95,6 @@ class GCSInterface(Node):
             )
 
     def loop(self):
-        global mission_upload_sess
         while True:
             msg = self.master.recv_match(blocking=False)
             if msg is not None:
@@ -130,15 +114,14 @@ class GCSInterface(Node):
                 self.t_last_sys = t
 
             # Retry message transmit
-            if (mission_upload_sess.is_waiting):
-                if (millis() - mission_upload_sess.t_last_transmit > mission_upload_sess.request_timeout_ms):
-                    if (mission_upload_sess.retry_count < mission_upload_sess.max_retry):
+            if (self.mission_upload_sess.is_waiting):
+                if (millis() - self.mission_upload_sess.t_last_transmit > self.mission_upload_sess.request_timeout_ms):
+                    if (self.mission_upload_sess.retry_count < self.mission_upload_sess.max_retry):
                         print("RETRANSMIT")
                         self.send_mission_request_int(self.master)
-                        mission_upload_sess.retry_count += 1
+                        self.mission_upload_sess.retry_count += 1
                     else:
                         print("MISSION UPLOAD TIMEOUT")
-
 
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
@@ -161,7 +144,6 @@ class GCSInterface(Node):
             buttons=m.buttons
         )
 
-
     def handle_param_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
         Handles PARAM_REQUEST_LIST from QGC.
@@ -181,7 +163,6 @@ class GCSInterface(Node):
         #     mvl_armed = (int(m.param1) == 1)
         # )
 
-
     def handle_mission_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
         Handles MISSION_REQUEST_LIST from QGC.
@@ -195,52 +176,29 @@ class GCSInterface(Node):
         #     seq=0
         # )
 
-
     def handle_mission_count(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        """
-        Handles MISSION_COUNT from QGC.
-
-        This tells us how many mission items QGC wants to send.
-        We store the count, mark upload as active, then request the first item.
-        """
-        global mission_upload_active
-        global mission_upload_sess
-
-        print(_m)
-
-        if not mission_upload_active:
-            mission_upload_active = True
-            mission_upload_sess.num_mission_items = _m.count
-            print(f"# Mission items: {mission_upload_sess.num_mission_items}")
+        
+        if not self.mission_upload_sess.upload_active:
+            self.mission_upload_sess.upload_active = True
+            self.mission_upload_sess.num_mission_items = _m.count
 
         self.send_mission_request_int(_m, master)
 
-
     def handle_mission_item_int(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
-        """
-        Handles one MISSION_ITEM_INT from QGC.
-        """
-
-        global mission_upload_active
-        global mission_upload_sess
-
         # Process the mission item
-        mission_upload_sess.retry_count = 0
-        mission_upload_sess.is_waiting = False
         mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
-        mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
+        self.mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
 
         # If we haven't seen everything yet, ask for the next item
-        if mission_upload_sess.current_mission_item < mission_upload_sess.num_mission_items - 1:
-            mission_upload_sess.current_mission_item += 1
+        if not self.mission_upload_sess.received_all_items():
             self.send_mission_request_int(_m, master)
             
         # If we've seen everything, acknowledge the mission and process it
         else:
             self.send_mission_ack(_m, master)
-            mission_upload_active = False
+            self.mission_upload_sess.upload_active = False
             
-            future = self.mission_upload_client.send_request(mission_upload_sess.mission_item_list)
+            future = self.mission_upload_client.send_request(self.mission_upload_sess.mission_item_list)
 
             rclpy.spin_until_future_complete(self.mission_upload_client, future)
 
@@ -250,7 +208,6 @@ class GCSInterface(Node):
                 self.mission_upload_client.get_logger().info(f"Mission upload succeeded: {response.success}")
             else:
                 self.mission_upload_client.get_logger().error(f"Mission upload failed: {response.success}")
-
 
     def handle_command_long(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
@@ -307,19 +264,16 @@ class GCSInterface(Node):
         """
         Requests mission items one by one from QGC.
         """
-        global mission_upload_active
-        global mission_upload_sess
         
         # If we haven't seen all the items yet, ask for the next
-        print(f"REQUESTING {mission_upload_sess.current_mission_item}")
+        print(f"REQUESTING {self.mission_upload_sess.last_rec_item + 1}")
         master.mav.mission_request_int_send(
             target_system=self.comms_config.MVL_SYSID,
             target_component=self.comms_config.MVL_COMPID,
-            seq=mission_upload_sess.current_mission_item
+            seq=self.mission_upload_sess.last_rec_item + 1
         )
-        mission_upload_sess.is_waiting = True # Flag that mission upload is awaiting a response
-        mission_upload_sess.t_last_transmit = millis()
-
+        self.mission_upload_sess.is_waiting = True # Flag that mission upload is awaiting a response
+        self.mission_upload_sess.t_last_transmit = millis()
 
     def send_mission_ack(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         master.mav.mission_ack_send(
@@ -327,7 +281,6 @@ class GCSInterface(Node):
                 target_component=self.comms_config.MVL_COMPID,
                 type=0
             )
-
 
     def send_heartbeat(self, master: mavutil.mavfile) -> None:
         """
@@ -348,7 +301,6 @@ class GCSInterface(Node):
             custom_mode=0xABBA,
             system_status=mavutil.mavlink.MAV_STATE_ACTIVE
         )
-
 
     def send_sys_status_and_att(self, master: mavutil.mavfile) -> None:
         """
@@ -387,19 +339,14 @@ class GCSInterface(Node):
             yawspeed=0.0
         )
 
-
 def main() -> None:
-
     rclpy.init()
-
     node = GCSInterface()
-
     try:
         rclpy.spin(node)
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 # Entry point
 if __name__ == "__main__":
     main()
