@@ -24,7 +24,8 @@ class MissionUploadSession:
     
     def reset(self):
         self.nums_mission_items = 0
-        self.current_mission_item = 0
+        self.upload_active = False
+        self.last_rec_item = -1
         self.retry_count = 0
         self.is_waiting = False
         self.t_last_transmit = -1

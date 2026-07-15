@@ -98,7 +98,6 @@ class GCSInterface(Node):
         while True:
             msg = self.master.recv_match(blocking=False)
             if msg is not None:
-                print(msg)
                 self.handle_mavlink_message(msg)
 
              # Send heartbeat periodically
@@ -122,6 +121,7 @@ class GCSInterface(Node):
                         self.mission_upload_sess.retry_count += 1
                     else:
                         print("MISSION UPLOAD TIMEOUT")
+                        self.mission_upload_sess.reset()
 
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
@@ -196,7 +196,7 @@ class GCSInterface(Node):
         # If we've seen everything, acknowledge the mission and process it
         else:
             self.send_mission_ack(_m, master)
-            self.mission_upload_sess.upload_active = False
+            self.mission_upload_sess.reset() # Reset fields -- prepare for next upload sess
             
             future = self.mission_upload_client.send_request(self.mission_upload_sess.mission_item_list)
 
