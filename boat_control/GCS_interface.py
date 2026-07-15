@@ -23,12 +23,11 @@ from pymavlink import mavutil
 # Local Imports
 from boat_control.MissionUploadSession import MissionUploadSession
 from boat_control.MissionItem import MissionItem
-from boat_control.mission_upload_client import MissionUploadClient
+from boat_control.services.mission_upload_client import MissionUploadClient
+from boat_control.services.arm_disarm_client import ArmDisarmClient
 from boat_control.data.comms_config import CommsConfig
 
-# ============================================================
-#                      GLOBAL STATE
-# ============================================================
+
 mvl_armed = False
 sys_stat_count = 0
 
@@ -50,8 +49,8 @@ def millis() -> int:
 class GCSInterface(Node):
     def __init__(self):
         super().__init__('gcs_interface')
-        self.comms_config = CommsConfig()           # Create communications configuration. TODO: Accept parameters
-        self.master = self.establish_gcs_connection() # Establish communication with the GCS station
+        self.comms_config = CommsConfig()                   # Create communications configuration. TODO: Accept parameters
+        self.master = self.establish_gcs_connection()       # Establish communication with the GCS station
         self.message_handlers = {
             mavutil.mavlink.MAVLINK_MSG_ID_MANUAL_CONTROL:
                 self.handle_manual_control,
@@ -71,9 +70,10 @@ class GCSInterface(Node):
             mavutil.mavlink.MAVLINK_MSG_ID_MISSION_COUNT:
                 self.handle_mission_count,
         }
-        self.mission_upload_sess = MissionUploadSession() # Store state relevant to current mission upload
-        self.mission_upload_client = MissionUploadClient() # Client for sending complete mission to mission manager
-        
+        self.mission_upload_sess = MissionUploadSession()   # Store state relevant to current mission upload
+        self.mission_upload_client = MissionUploadClient()  # Client for sending complete mission to mission manager
+        self.arm_disarm_client = ArmDisarmClient()          # Client for arming and disarming the vehicle
+
         self.t_last_hb = now_s()
         self.t_last_sys = now_s()
         self.timer = self.create_timer(0.01, self.loop)
@@ -178,9 +178,8 @@ class GCSInterface(Node):
 
     def handle_mission_count(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         
-        if not self.mission_upload_sess.upload_active:
-            self.mission_upload_sess.upload_active = True
-            self.mission_upload_sess.num_mission_items = _m.count
+        if not self.mission_upload_sess.is_active():
+            self.mission_upload_sess.begin_new_upload(_m.count)
 
         self.send_mission_request_int(_m, master)
 
@@ -246,19 +245,22 @@ class GCSInterface(Node):
 
         # QGC is asking to arm or disarm
         elif cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
-            mvl_armed = (int(m.param1) == 1)
 
-            master.mav.command_ack_send(
-                command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-                result=mavutil.mavlink.MAV_RESULT_ACCEPTED,
-            )
+            future = self.arm_disarm_client.send_request(bool(m.param1))
+            rclpy.spin_until_future_complete(self.arm_disarm_client, future)
+            response = future.result()
+            self.arm_disarm_client.get_logger.info(f"{response.message}")
 
-        # Waypoint/nav command received
-        # elif cmd == mavutil.mavlink.MAV_CMD_NAV_WAYPOINT:
-        #     print("WAYPOINT COMMAND RECEIVED")
-
-        # else:
-        #     print("OTHER CMD RECEIVED")
+            if response.success:
+                master.mav.command_ack_send(
+                    command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                    result=mavutil.mavlink.MAV_RESULT_ACCEPTED,
+                )
+            else:
+                master.mav.command_ack_send(
+                    command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                    result=mavutil.mavlink.MAV_RESULT_FAILED,
+                )
 
     def send_mission_request_int(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         """

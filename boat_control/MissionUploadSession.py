@@ -21,6 +21,13 @@ class MissionUploadSession:
 
     def received_all_items(self):
         return self.last_rec_item == self.num_mission_items - 1
+
+    def is_active(self):
+        return self.upload_active
+
+    def begin_new_upload(self, num_items:int):
+        self.upload_active = True
+        self.num_mission_items = num_items
     
     def reset(self):
         self.nums_mission_items = 0

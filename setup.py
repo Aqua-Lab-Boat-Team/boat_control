@@ -26,7 +26,8 @@ setup(
         'console_scripts': [
             'manctrltest = boat_control.pub_controller:main',
             'mission_manager = boat_control.mission_manager:main',
-            'gcs_interface = boat_control.GCS_interface:main'
+            'gcs_interface = boat_control.GCS_interface:main',
+            'vehicle_supervisor = boat_control.vehicle_supervisor:main'
         ],
     },
 )
