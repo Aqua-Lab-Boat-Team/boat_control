@@ -13,6 +13,7 @@ from rclpy.node import Node
 # Message Type Imports
 from std_msgs.msg import String
 from boat_iface.msg import MissionItemInt
+from boat_iface.msg import ArmState
 
 # Service Type Imports
 from boat_iface.srv import UploadMission
@@ -26,6 +27,7 @@ from boat_control.MissionItem import MissionItem
 from boat_control.services.mission_upload_client import MissionUploadClient
 from boat_control.services.arm_disarm_client import ArmDisarmClient
 from boat_control.data.comms_config import CommsConfig
+from boat_control.data.gcs_interface_cache import GCSInterfaceCache
 
 
 mvl_armed = False
@@ -71,13 +73,29 @@ class GCSInterface(Node):
                 self.handle_mission_count,
         }
         self.mission_upload_sess = MissionUploadSession()   # Store state relevant to current mission upload
+        self.cache = GCSInterfaceCache()
+        
+        ### CLIENTS ####
         self.mission_upload_client = MissionUploadClient()  # Client for sending complete mission to mission manager
         self.arm_disarm_client = ArmDisarmClient()          # Client for arming and disarming the vehicle
+        ################
+
+
+        ### SUBSCRIPTIONS ###
+        self.arm_state_sub = self.create_subscription(ArmState, '/vehicle/arm_state', self.arm_state_sub_cb, 10)
+
+        #####################
 
         self.t_last_hb = now_s()
         self.t_last_sys = now_s()
         self.timer = self.create_timer(0.01, self.loop)
 
+
+    ### SUBSCRIPTION CB ###
+    def arm_state_sub_cb(self, msg):
+        self.cache.arm_state = msg.armed
+
+    #######################
     def establish_gcs_connection(self):
         if not self.comms_config.USE_UDP:
             return mavutil.mavlink_connection(
@@ -95,33 +113,33 @@ class GCSInterface(Node):
             )
 
     def loop(self):
-        while True:
-            msg = self.master.recv_match(blocking=False)
-            if msg is not None:
-                self.handle_mavlink_message(msg)
 
-             # Send heartbeat periodically
-            t = now_s()
- 
-            if (t - self.t_last_hb) >= self.comms_config.HB_INTERVAL:
-                self.send_heartbeat(self.master)
-                self.t_last_hb = t
+        msg = self.master.recv_match(blocking=False)
+        if msg is not None:
+            self.handle_mavlink_message(msg)
 
-            # Send status + attitude periodically
-            if (t - self.t_last_sys) >= self.comms_config.SYS_STAT_INTERVAL:
-                self.send_sys_status_and_att(self.master)
-                self.t_last_sys = t
+        # Send heartbeat periodically
+        t = now_s()
 
-            # Retry message transmit
-            if (self.mission_upload_sess.is_waiting):
-                if (millis() - self.mission_upload_sess.t_last_transmit > self.mission_upload_sess.request_timeout_ms):
-                    if (self.mission_upload_sess.retry_count < self.mission_upload_sess.max_retry):
-                        print("RETRANSMIT")
-                        self.send_mission_request_int(self.master)
-                        self.mission_upload_sess.retry_count += 1
-                    else:
-                        print("MISSION UPLOAD TIMEOUT")
-                        self.mission_upload_sess.reset()
+        if (t - self.t_last_hb) >= self.comms_config.HB_INTERVAL:
+            self.send_heartbeat(self.master)
+            self.t_last_hb = t
+
+        # Send status + attitude periodically
+        if (t - self.t_last_sys) >= self.comms_config.SYS_STAT_INTERVAL:
+            self.send_sys_status_and_att(self.master)
+            self.t_last_sys = t
+
+        # Retry message transmit
+        if (self.mission_upload_sess.is_waiting):
+            if (millis() - self.mission_upload_sess.t_last_transmit > self.mission_upload_sess.request_timeout_ms):
+                if (self.mission_upload_sess.retry_count < self.mission_upload_sess.max_retry):
+                    print("RETRANSMIT")
+                    self.send_mission_request_int(self.master)
+                    self.mission_upload_sess.retry_count += 1
+                else:
+                    print("MISSION UPLOAD TIMEOUT")
+                    self.mission_upload_sess.reset()
 
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
@@ -249,7 +267,7 @@ class GCSInterface(Node):
             future = self.arm_disarm_client.send_request(bool(m.param1))
             rclpy.spin_until_future_complete(self.arm_disarm_client, future)
             response = future.result()
-            self.arm_disarm_client.get_logger.info(f"{response.message}")
+            self.arm_disarm_client.get_logger().info(f"{response.message}")
 
             if response.success:
                 master.mav.command_ack_send(
@@ -290,7 +308,7 @@ class GCSInterface(Node):
         """
         base_mode = (
             mavutil.mavlink.MAV_MODE_MANUAL_ARMED
-            if mvl_armed else mavutil.mavlink.MAV_MODE_MANUAL_DISARMED
+            if self.cache.arm_state else mavutil.mavlink.MAV_MODE_MANUAL_DISARMED
         )
 
         # Add custom mode enabled flag

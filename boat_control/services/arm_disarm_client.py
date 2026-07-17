@@ -13,7 +13,7 @@ class ArmDisarmClient(Node):
     def send_request(self, arm:bool):
         request = ArmDisarm.Request()      # Create a request
 
-        request.arm = arm
+        request.request_arm = arm
         future = self.cli.call_async(request)  # Make async request
 
         return future
