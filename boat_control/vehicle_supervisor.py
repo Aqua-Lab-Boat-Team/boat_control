@@ -41,7 +41,7 @@ class VehicleSupervisor(Node):
                 response.err = 2
                 response.message = 'vehicle already disarmed'
             else:
-                response.success = False
+                response.success = True
                 response.err = 0
                 response.message = 'success'
                 self.armed = False
