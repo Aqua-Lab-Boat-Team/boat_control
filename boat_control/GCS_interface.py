@@ -13,7 +13,7 @@ from rclpy.node import Node
 # Message Type Imports
 from std_msgs.msg import String
 from boat_iface.msg import MissionItemInt
-from boat_iface.msg import ArmState
+from boat_iface.msg import VehicleSupervisorState
 
 # Service Type Imports
 from boat_iface.srv import UploadMission
@@ -28,9 +28,9 @@ from boat_control.services.mission_upload_client import MissionUploadClient
 from boat_control.services.arm_disarm_client import ArmDisarmClient
 from boat_control.data.comms_config import CommsConfig
 from boat_control.data.gcs_interface_cache import GCSInterfaceCache
+from boat_control.enums.flight_mode import FlightMode
 
 
-mvl_armed = False
 sys_stat_count = 0
 
 def now_s() -> float:
@@ -82,8 +82,7 @@ class GCSInterface(Node):
 
 
         ### SUBSCRIPTIONS ###
-        self.arm_state_sub = self.create_subscription(ArmState, '/vehicle/arm_state', self.arm_state_sub_cb, 10)
-
+        self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.vehicle_supervisor_state_sub_cb, 10)
         #####################
 
         self.t_last_hb = now_s()
@@ -92,10 +91,11 @@ class GCSInterface(Node):
 
 
     ### SUBSCRIPTION CB ###
-    def arm_state_sub_cb(self, msg):
+    def vehicle_supervisor_state_sub_cb(self, msg):
         self.cache.arm_state = msg.armed
-
+        self.cache.flight_mode = FlightMode(msg.flight_mode)
     #######################
+
     def establish_gcs_connection(self):
         if not self.comms_config.USE_UDP:
             return mavutil.mavlink_connection(
@@ -121,6 +121,7 @@ class GCSInterface(Node):
         # Send heartbeat periodically
         t = now_s()
 
+        # TODO: Put these functions in timers
         if (t - self.t_last_hb) >= self.comms_config.HB_INTERVAL:
             self.send_heartbeat(self.master)
             self.t_last_hb = t
@@ -146,7 +147,7 @@ class GCSInterface(Node):
         handler = self.message_handlers.get(msg_id)
 
         if handler is None:
-            self.get_logger().debug(f"Unhandled MAVLink message ID: {msg_id}")
+            self.get_logger().info(f"{msg}")
             return
         
         if msg.get_srcSystem() == self.comms_config.GCS_SYSID:
@@ -171,15 +172,13 @@ class GCSInterface(Node):
         """
         param_id = b"a_parm"
 
-        # master.mav.param_value_send(
-        #     param_id=param_id,
-        #     param_value=123.456,
-        #     param_type=mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
-        #     param_count=1,
-        #     param_index=0,
-        #     cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-        #     mvl_armed = (int(m.param1) == 1)
-        # )
+        master.mav.param_value_send(
+            param_id=param_id,
+            param_value=123.456,
+            param_type=mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+            param_count=1,
+            param_index=0,
+        )
 
     def handle_mission_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
@@ -213,10 +212,8 @@ class GCSInterface(Node):
         # If we've seen everything, acknowledge the mission and process it
         else:
             self.send_mission_ack(_m, master)
-            self.mission_upload_sess.reset() # Reset fields -- prepare for next upload sess
-            
             future = self.mission_upload_client.send_request(self.mission_upload_sess.mission_item_list)
-
+            
             rclpy.spin_until_future_complete(self.mission_upload_client, future)
 
             response = future.result()
@@ -225,6 +222,8 @@ class GCSInterface(Node):
                 self.mission_upload_client.get_logger().info(f"Mission upload succeeded: {response.success}")
             else:
                 self.mission_upload_client.get_logger().error(f"Mission upload failed: {response.success}")
+            
+            self.mission_upload_sess.reset() # Reset fields -- prepare for next upload sess
 
     def handle_command_long(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
@@ -235,7 +234,6 @@ class GCSInterface(Node):
         - arm/disarm
         - waypoint-related commands
         """
-        global mvl_armed
 
         cmd = m.command
 
@@ -280,6 +278,9 @@ class GCSInterface(Node):
                     result=mavutil.mavlink.MAV_RESULT_FAILED,
                 )
 
+        else:
+            self.get_logger().debug(f'{m}')
+
     def send_mission_request_int(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         """
         Requests mission items one by one from QGC.
@@ -315,7 +316,7 @@ class GCSInterface(Node):
         base_mode |= mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
 
         master.mav.heartbeat_send(
-            type=mavutil.mavlink.MAV_TYPE_SUBMARINE,
+            type=mavutil.mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
             autopilot=mavutil.mavlink.MAV_AUTOPILOT_GENERIC,
             base_mode=base_mode,
             custom_mode=0xABBA,

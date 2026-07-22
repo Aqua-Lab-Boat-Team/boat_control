@@ -2,11 +2,10 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached
-from boat_iface.srv import ArmDisarm
-from boat_iface.msg import ArmState
-
+from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState
+from boat_iface.srv import ArmDisarm, FlightModeChange
 from boat_control.Mission import Mission, MissionType
+from boat_control.enums.flight_mode import FlightMode
 
 class VehicleSupervisor(Node):
     def __init__(self):
@@ -14,15 +13,19 @@ class VehicleSupervisor(Node):
         
         ##### Vehicle Supervisor State #####
         self.armed = False
+        self.flight_mode = FlightMode.HOLD
         ####################################
-        self.arm_state_pub = self.create_publisher(ArmState, '/vehicle/arm_state', 10)
-        self.arm_state_pub_timer = self.create_timer(0.5, self.arm_pub_cb)
-        self.mission_upload_srv = self.create_service(ArmDisarm, 'arm_disarm', self.arm_disarm_cb)
         
-    def arm_pub_cb(self):
-        arm_state = ArmState()
-        arm_state.armed = self.armed
-        self.arm_state_pub.publish(arm_state)
+        self.vehicle_supervisor_state_pub = self.create_publisher(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', 10)
+        self.vehicle_supervisor_state_pub_timer = self.create_timer(0.5, self.vehicle_supervisor_state_pub_cb)
+        self.arm_disarm_srv = self.create_service(ArmDisarm, 'arm_disarm', self.arm_disarm_cb)
+        self.flight_mode_change_srv = self.create_service(FlightModeChange, 'flight_mode_change', self.flight_mode_change_cb)
+        
+    def vehicle_supervisor_state_pub_cb(self):
+        vehicle_supervisor_state = VehicleSupervisorState()
+        vehicle_supervisor_state.armed = self.armed
+        vehicle_supervisor_state.flight_mode = self.flight_mode.value
+        self.vehicle_supervisor_state_pub.publish(vehicle_supervisor_state)
     
     def arm_disarm_cb(self, request, response):
         if request.request_arm == True:
@@ -46,6 +49,10 @@ class VehicleSupervisor(Node):
                 response.message = 'success'
                 self.armed = False
 
+        self.get_logger().info(f"RECV: {request}")
+        return response
+
+    def flight_mode_change_cb(self, request, response):
         self.get_logger().info(f"RECV: {request}")
         return response
 
