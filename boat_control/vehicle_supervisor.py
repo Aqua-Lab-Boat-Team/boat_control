@@ -54,6 +54,10 @@ class VehicleSupervisor(Node):
 
     def flight_mode_change_cb(self, request, response):
         self.get_logger().info(f"RECV: {request}")
+        if self.armed:
+            response.success = True
+            response.err = 0
+            response.message = f"Mode changed to {FlightMode(request.requested_flight_mode)}"
         return response
 
 

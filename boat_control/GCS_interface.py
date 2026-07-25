@@ -27,7 +27,7 @@ from boat_control.MissionItem import MissionItem
 from boat_control.services.mission_upload_client import MissionUploadClient
 from boat_control.services.arm_disarm_client import ArmDisarmClient
 from boat_control.data.comms_config import CommsConfig
-from boat_control.data.gcs_interface_cache import GCSInterfaceCache
+from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
 
 
@@ -73,7 +73,7 @@ class GCSInterface(Node):
                 self.handle_mission_count,
         }
         self.mission_upload_sess = MissionUploadSession()   # Store state relevant to current mission upload
-        self.cache = GCSInterfaceCache()
+        self.cache = SupervisorStateCache()
         
         ### CLIENTS ####
         self.mission_upload_client = MissionUploadClient()  # Client for sending complete mission to mission manager
@@ -147,7 +147,6 @@ class GCSInterface(Node):
         handler = self.message_handlers.get(msg_id)
 
         if handler is None:
-            self.get_logger().info(f"{msg}")
             return
         
         if msg.get_srcSystem() == self.comms_config.GCS_SYSID:
@@ -203,6 +202,7 @@ class GCSInterface(Node):
     def handle_mission_item_int(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         # Process the mission item
         mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
+        self.get_logger().info(f'{mission_item.frame}')
         self.mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
 
         # If we haven't seen everything yet, ask for the next item
@@ -278,9 +278,6 @@ class GCSInterface(Node):
                     result=mavutil.mavlink.MAV_RESULT_FAILED,
                 )
 
-        else:
-            self.get_logger().debug(f'{m}')
-
     def send_mission_request_int(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         """
         Requests mission items one by one from QGC.
@@ -303,6 +300,26 @@ class GCSInterface(Node):
                 type=0
             )
 
+
+    ### FROM MAVUTIL, FOR REFERENCE ONLY ###
+        # auto_mode_flags  = mavlink.MAV_MODE_FLAG_AUTO_ENABLED \
+        #                  | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED \
+        #                  | mavlink.MAV_MODE_FLAG_GUIDED_ENABLED
+
+        # px4_map = { "MANUAL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_MANUAL,      0                                       ),
+        #             "STABILIZED":    (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_STABILIZED,  0                                       ),
+        #             "ACRO":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |                                           mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_ACRO,        0                                       ),
+        #             "RATTITUDE":     (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |                                           mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_RATTITUDE,   0                                       ),
+        #             "ALTCTL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_ALTCTL,      0                                       ),
+        #             "POSCTL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_POSCTL,      0                                       ),
+        #             "LOITER":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_LOITER         ),
+        #             "MISSION":       (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_MISSION        ),
+        #             "RTL":           (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_RTL            ),
+        #             "LAND":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_LAND           ),
+        #             "RTGS":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_RTGS           ),
+        #             "FOLLOWME":      (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_FOLLOW_TARGET  ),
+        #             "OFFBOARD":      (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_OFFBOARD,    0                                       ),
+        #             "TAKEOFF":       (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags, 
     def send_heartbeat(self, master: mavutil.mavfile) -> None:
         """
         Send heartbeat periodically so QGC knows this MAVLink component is alive.
@@ -316,7 +333,7 @@ class GCSInterface(Node):
         base_mode |= mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
 
         master.mav.heartbeat_send(
-            type=mavutil.mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+            type=mavutil.mavlink.MAV_TYPE_SURFACE_BOAT,
             autopilot=mavutil.mavlink.MAV_AUTOPILOT_GENERIC,
             base_mode=base_mode,
             custom_mode=0xABBA,
