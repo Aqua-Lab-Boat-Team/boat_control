@@ -75,9 +75,12 @@ class MissionManager(Node):
                         self.state = MissionState.ACTIVE
                         self.get_logger().info("Guided mode granted! Running mission...")
             case MissionState.ACTIVE:
-                # Publish goal position
-                self.get_logger().info("Publishing goal...")
-                self.publish_goal_waypoint()
+                if self.cache.arm_state == True:
+                    if self.cache.flight_mode == FlightMode.GUIDED:
+                        self.get_logger().info("Publishing goal...")
+                        self.publish_goal_waypoint()
+                    else:
+                        self.state = MissionState.PAUSED
             case MissionState.PAUSED:
                 pass
             case MissionState.COMPLETED:

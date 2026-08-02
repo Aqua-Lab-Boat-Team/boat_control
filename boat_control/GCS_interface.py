@@ -102,7 +102,7 @@ class GCSInterface(Node):
                 self.comms_config.UART_PORT,
                 baud=self.comms_config.UART_BAUD,
                 source_system=self.comms_config.MVL_SYSID,
-                source_component=self.comms_configMVL_COMPID
+                source_component=self.comms_config.MVL_COMPID
             )
         else:
             print("UDP")
@@ -145,6 +145,7 @@ class GCSInterface(Node):
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
         handler = self.message_handlers.get(msg_id)
+        self.get_logger().info(f'{msg}')
 
         if handler is None:
             return
@@ -197,7 +198,7 @@ class GCSInterface(Node):
         if not self.mission_upload_sess.is_active():
             self.mission_upload_sess.begin_new_upload(_m.count)
 
-        self.send_mission_request_int(_m, master)
+        self.send_mission_request_int(master)
 
     def handle_mission_item_int(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         # Process the mission item
@@ -207,7 +208,7 @@ class GCSInterface(Node):
 
         # If we haven't seen everything yet, ask for the next item
         if not self.mission_upload_sess.received_all_items():
-            self.send_mission_request_int(_m, master)
+            self.send_mission_request_int(master)
             
         # If we've seen everything, acknowledge the mission and process it
         else:
@@ -278,7 +279,7 @@ class GCSInterface(Node):
                     result=mavutil.mavlink.MAV_RESULT_FAILED,
                 )
 
-    def send_mission_request_int(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
+    def send_mission_request_int(self, master: mavutil.mavfile):
         """
         Requests mission items one by one from QGC.
         """
