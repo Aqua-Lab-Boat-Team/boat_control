@@ -9,11 +9,11 @@ from builtins import getattr
 
 # Base class for creating a ROS 2 node in Python
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 # Message Type Imports
 from std_msgs.msg import String
-from boat_iface.msg import MissionItemInt
-from boat_iface.msg import VehicleSupervisorState
+from boat_iface.msg import MissionItemInt, VehicleSupervisorState, GPS
 
 # Service Type Imports
 from boat_iface.srv import UploadMission
@@ -51,6 +51,7 @@ def millis() -> int:
 class GCSInterface(Node):
     def __init__(self):
         super().__init__('gcs_interface')
+        self.start_time = millis()
         self.comms_config = CommsConfig()                   # Create communications configuration. TODO: Accept parameters
         self.master = self.establish_gcs_connection()       # Establish communication with the GCS station
         self.message_handlers = {
@@ -83,6 +84,7 @@ class GCSInterface(Node):
 
         ### SUBSCRIPTIONS ###
         self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.vehicle_supervisor_state_sub_cb, 10)
+        self.gps_sub = self.create_subscription(GPS, '/vehicle/sensors/gps', self.gps_sub_cb, qos_profile_sensor_data)
         #####################
 
         self.t_last_hb = now_s()
@@ -94,6 +96,19 @@ class GCSInterface(Node):
     def vehicle_supervisor_state_sub_cb(self, msg):
         self.cache.arm_state = msg.armed
         self.cache.flight_mode = FlightMode(msg.flight_mode)
+
+    def gps_sub_cb(self, msg):
+        self.master.mav.global_position_int_send(
+            int(millis() - self.start_time),
+            int(msg.latitude * 1e7),
+            int(msg.longitude * 1e7),
+            int(0),
+            0,
+            int(msg.vx),
+            int(msg.vy),
+            int(msg.vz),
+            int(msg.heading),
+        )
     #######################
 
     def establish_gcs_connection(self):
@@ -301,26 +316,6 @@ class GCSInterface(Node):
                 type=0
             )
 
-
-    ### FROM MAVUTIL, FOR REFERENCE ONLY ###
-        # auto_mode_flags  = mavlink.MAV_MODE_FLAG_AUTO_ENABLED \
-        #                  | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED \
-        #                  | mavlink.MAV_MODE_FLAG_GUIDED_ENABLED
-
-        # px4_map = { "MANUAL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_MANUAL,      0                                       ),
-        #             "STABILIZED":    (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_STABILIZED,  0                                       ),
-        #             "ACRO":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |                                           mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_ACRO,        0                                       ),
-        #             "RATTITUDE":     (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |                                           mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_RATTITUDE,   0                                       ),
-        #             "ALTCTL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_ALTCTL,      0                                       ),
-        #             "POSCTL":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | mavlink.MAV_MODE_FLAG_STABILIZE_ENABLED | mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED,   PX4_CUSTOM_MAIN_MODE_POSCTL,      0                                       ),
-        #             "LOITER":        (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_LOITER         ),
-        #             "MISSION":       (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_MISSION        ),
-        #             "RTL":           (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_RTL            ),
-        #             "LAND":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_LAND           ),
-        #             "RTGS":          (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_RTGS           ),
-        #             "FOLLOWME":      (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_AUTO,        PX4_CUSTOM_SUB_MODE_AUTO_FOLLOW_TARGET  ),
-        #             "OFFBOARD":      (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags,                                                                        PX4_CUSTOM_MAIN_MODE_OFFBOARD,    0                                       ),
-        #             "TAKEOFF":       (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | auto_mode_flags, 
     def send_heartbeat(self, master: mavutil.mavfile) -> None:
         """
         Send heartbeat periodically so QGC knows this MAVLink component is alive.

@@ -6,6 +6,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Float64MultiArray
+from boat_iface.msg import GPS
 
 from pyubx2 import UBXReader, UBX_PROTOCOL, NMEA_PROTOCOL
 
@@ -34,12 +35,19 @@ class UbloxGpsNode(Node):
             )
 
         self.publisher = self.create_publisher(
-            Float64MultiArray,
+            GPS,
             "/vehicle/sensors/gps",
             qos_profile_sensor_data,
         )
 
         self.heading_deg: float | None = None
+        self.lat: float | None = None
+        self.long: float | None = None
+        self.alt = 0.0
+        self.vx: int | None = None
+        self.vy: int | None = None
+        self.vz: int | None = None
+
 
         try:
             self.serial_port = serial.Serial(
@@ -59,11 +67,12 @@ class UbloxGpsNode(Node):
         # Parse only binary UBX messages.
         self.ubx_reader = UBXReader(
             self.serial_port,
-            protfilter=NMEA_PROTOCOL | UBX_PROTOCOL,
+            protfilter= NMEA_PROTOCOL | UBX_PROTOCOL,
         )
 
         # Read available UART messages without permanently blocking ROS.
         self.timer = self.create_timer(0.01, self.read_uart)
+        self.pub_timer = self.create_timer(0.5, self.pub_gps)
 
         self.get_logger().info(
             f"Reading ZED-F9P from {port} at {baudrate} baud; "
@@ -96,10 +105,11 @@ class UbloxGpsNode(Node):
         elif ubx_message.identity == "NAV-PVT":
             self.handle_nav_pvt(ubx_message)
 
-        elif ubx_message.identity == "GNGLL":
-            self.handle_gngll(ubx_message)
+        # elif ubx_message.identity == "GNGLL":
+        #     self.handle_gngll(ubx_message)
 
     def handle_relposned(self, ubx_message) -> None:
+        
         if self.heading_mode != "relpos":
             return
 
@@ -125,9 +135,12 @@ class UbloxGpsNode(Node):
         if not fix_valid or coordinates_invalid:
             return
 
-        latitude = float(ubx_message.lat)
-        longitude = float(ubx_message.lon)
-
+        self.lat = float(ubx_message.lat)
+        self.long = float(ubx_message.lon)
+        self.vx = int(ubx_message.velN / 10)
+        self.vy = int(ubx_message.velE / 10)
+        self.vz = 0
+        
         if self.heading_mode == "motion":
             # Course over ground. This is not reliable while stationary.
             self.heading_deg = float(ubx_message.headMot) % 360.0
@@ -136,46 +149,37 @@ class UbloxGpsNode(Node):
         if self.heading_deg is None:
             return
 
-        output = Float64MultiArray()
-        output.data = [
-            latitude,
-            longitude,
-            self.heading_deg,
-        ]
 
-        self.publisher.publish(output)
+    # def handle_gngll(self, ubx_message) -> None:
+    #     # GLL status:
+    #     # "A" = valid position
+    #     # "V" = invalid position
+    #     if getattr(ubx_message, "status", "V") != "A":
+    #         self.get_logger().debug("GNGLL position is not valid")
+    #         return
 
-    def handle_gngll(self, ubx_message) -> None:
-        # GLL status:
-        # "A" = valid position
-        # "V" = invalid position
-        if getattr(ubx_message, "status", "V") != "A":
-            self.get_logger().debug("GNGLL position is not valid")
+    #     try:
+    #         self.lat = float(ubx_message.lat)
+    #         self.long = float(ubx_message.lon)
+    #     except (AttributeError, TypeError, ValueError) as error:
+    #         self.get_logger().warning(
+    #             f"Invalid GNGLL coordinates: {error}"
+    #         )
+    #         return
+
+
+    def pub_gps(self) -> None:
+        if (self.lat is None) or (self.long is None) or (self.heading_deg is None) or (self.vx is None) or (self.vy is None) or (self.vz is None):
             return
-
-        try:
-            latitude = float(ubx_message.lat)
-            longitude = float(ubx_message.lon)
-        except (AttributeError, TypeError, ValueError) as error:
-            self.get_logger().warning(
-                f"Invalid GNGLL coordinates: {error}"
-            )
-            return
-
-        output = Float64MultiArray()
-        output.data = [
-            latitude,
-            longitude,
-        ]
-
-        self.publisher.publish(output)
-
-        self.get_logger().debug(
-            f"Published latitude={latitude:.8f}, "
-            f"longitude={longitude:.8f}"
-        )
-
-
+        else:
+            msg = GPS()
+            msg.latitude = self.lat
+            msg.longitude = self.long
+            msg.heading = self.heading_deg
+            msg.vx = self.vx
+            msg.vy = self.vy
+            msg.vz = self.vz
+            self.publisher.publish(msg)
 
     def destroy_node(self) -> None:
         if hasattr(self, "serial_port") and self.serial_port.is_open:

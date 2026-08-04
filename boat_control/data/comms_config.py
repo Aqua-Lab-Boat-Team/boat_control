@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class CommsConfig:
 
-    USE_UDP:bool = False # UDP or UART -- Default to UDP
+    USE_UDP:bool = True # UDP or UART -- Default to UDP
     UDP_PORT:str = "udpout:192.168.55.100:14550"
 
     UART_PORT:str = "/dev/ttyACM0"
