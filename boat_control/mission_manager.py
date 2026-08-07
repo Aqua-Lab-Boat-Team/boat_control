@@ -1,8 +1,9 @@
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
-from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, GoalWaypoint, VehicleSupervisorState
+from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, GoalWaypoint, VehicleSupervisorState, GPS
 from boat_iface.srv import UploadMission, FlightModeChange
 
 from boat_control.Mission import Mission, MissionType
@@ -11,6 +12,8 @@ from boat_control.enums.flight_mode import FlightMode
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.services.flight_mode_change_client import FlightModeChangeClient
 
+from boat_control.helpers.math_helpers import distance_between_coordinates, goal_is_reached
+
 class MissionManager(Node):
     def __init__(self):
         super().__init__('mission_manager')
@@ -18,6 +21,8 @@ class MissionManager(Node):
         self.mission = Mission()
         self.state = MissionState.NO_MISSION
         self.cache = SupervisorStateCache()
+        self.lat: int | None = None
+        self.long: int | None = None
         #######################
 
         #### SERVERS ####
@@ -31,6 +36,10 @@ class MissionManager(Node):
         #### PUBLISHERS #####
         self.goal_waypoint_pub = self.create_publisher(GoalWaypoint, '/mission/goal_waypoint', 10)
         self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.supervisor_state_sub_cb, 10)
+        #####################
+
+        #### SUBSCRIBERS ####
+        self.gps_sub = self.create_subscription(GPS, '/vehicle/sensors/gps', self.gps_sub_cb, qos_profile_sensor_data)
         #####################
         self.timer = self.create_timer(0.01, self.loop)
         
@@ -75,12 +84,11 @@ class MissionManager(Node):
                         self.state = MissionState.ACTIVE
                         self.get_logger().info("Guided mode granted! Running mission...")
             case MissionState.ACTIVE:
+                self.get_logger().info(f"arm: {self.cache.arm_state}, mode: {self.cache.flight_mode}")
                 if self.cache.arm_state == True:
-                    if self.cache.flight_mode == FlightMode.GUIDED:
-                        self.get_logger().info("Publishing goal...")
+                    #if self.cache.flight_mode == FlightMode.GUIDED:
+                    if (self.lat is not None) and (self.long is not None):
                         self.publish_goal_waypoint()
-                    else:
-                        self.state = MissionState.PAUSED
             case MissionState.PAUSED:
                 pass
             case MissionState.COMPLETED:
@@ -96,6 +104,15 @@ class MissionManager(Node):
         goal_waypoint = GoalWaypoint()
         goal_waypoint.x = current_waypoint.x
         goal_waypoint.y = current_waypoint.y
+        self.get_logger().info(f'{format(goal_waypoint.x / 1e7, ".12f")}')
+
+        ### TEST ####
+        self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
+        #############
+        
+        if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7) <= 10:
+            if not (self.mission.current_item >= self.mission.num_items - 1):
+                self.mission.current_item += 1
 
         self.goal_waypoint_pub.publish(goal_waypoint)
 
@@ -108,6 +125,11 @@ class MissionManager(Node):
         rclpy.spin_until_future_complete(self.flight_mode_change_client, future)
         response = future.result()
         return response
+
+    def gps_sub_cb(self, msg) -> None:
+        self.lat = msg.latitude
+        self.long = msg.longitude
+
             
 def main(args=None):
     rclpy.init(args=args)

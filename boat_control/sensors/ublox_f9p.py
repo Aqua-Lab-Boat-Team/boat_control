@@ -140,6 +140,7 @@ class UbloxGpsNode(Node):
         self.vx = int(ubx_message.velN / 10)
         self.vy = int(ubx_message.velE / 10)
         self.vz = 0
+
         
         if self.heading_mode == "motion":
             # Course over ground. This is not reliable while stationary.

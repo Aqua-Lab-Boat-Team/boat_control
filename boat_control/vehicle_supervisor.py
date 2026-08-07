@@ -17,7 +17,7 @@ class VehicleSupervisor(Node):
         ####################################
         
         self.vehicle_supervisor_state_pub = self.create_publisher(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', 10)
-        self.vehicle_supervisor_state_pub_timer = self.create_timer(0.5, self.vehicle_supervisor_state_pub_cb)
+        self.vehicle_supervisor_state_pub_timer = self.create_timer(0.05, self.vehicle_supervisor_state_pub_cb)
         self.arm_disarm_srv = self.create_service(ArmDisarm, 'arm_disarm', self.arm_disarm_cb)
         self.flight_mode_change_srv = self.create_service(FlightModeChange, 'flight_mode_change', self.flight_mode_change_cb)
         
@@ -55,6 +55,7 @@ class VehicleSupervisor(Node):
     def flight_mode_change_cb(self, request, response):
         self.get_logger().info(f"RECV: {request}")
         if self.armed:
+            self.flight_mode = FlightMode(request.requested_flight_mode)
             response.success = True
             response.err = 0
             response.message = f"Mode changed to {FlightMode(request.requested_flight_mode)}"

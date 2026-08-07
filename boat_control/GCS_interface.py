@@ -160,7 +160,6 @@ class GCSInterface(Node):
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
         handler = self.message_handlers.get(msg_id)
-        self.get_logger().info(f'{msg}')
 
         if handler is None:
             return
@@ -218,7 +217,6 @@ class GCSInterface(Node):
     def handle_mission_item_int(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         # Process the mission item
         mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
-        self.get_logger().info(f'{mission_item.frame}')
         self.mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
 
         # If we haven't seen everything yet, ask for the next item
