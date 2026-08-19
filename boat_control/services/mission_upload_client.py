@@ -4,10 +4,10 @@ from boat_iface.msg import MissionItemInt
 from boat_iface.srv import UploadMission
 
 
-class MissionUploadClient(Node):
-    def __init__(self):
-        super().__init__('mission_upload_client')
-        self.cli = self.create_client(UploadMission, 'upload_mission')
+class MissionUploadClient():
+    def __init__(self, node):
+        self.node = node
+        self.cli = node.create_client(UploadMission, 'upload_mission')
         while not self.cli.wait_for_service(timeout_sec=0.5):
             self.get_logger().info('Mission upload not available, waiting again...')
 

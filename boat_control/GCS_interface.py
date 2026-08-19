@@ -77,7 +77,7 @@ class GCSInterface(Node):
         self.cache = SupervisorStateCache()
         
         ### CLIENTS ####
-        self.mission_upload_client = MissionUploadClient()  # Client for sending complete mission to mission manager
+        self.mission_upload_client = MissionUploadClient(self)  # Client for sending complete mission to mission manager
         self.arm_disarm_client = ArmDisarmClient()          # Client for arming and disarming the vehicle
         ################
 
@@ -227,18 +227,18 @@ class GCSInterface(Node):
         else:
             self.send_mission_ack(_m, master)
             future = self.mission_upload_client.send_request(self.mission_upload_sess.mission_item_list)
-            
-            rclpy.spin_until_future_complete(self.mission_upload_client, future)
+            future.add_done_callback(self.mission_upload_done)
+        
+    def mission_upload_done(self, future):
+        response = future.result()
 
-            response = future.result()
+        if response.success:
+            self.get_logger().info("Mission upload succeeded")
+        else:
+            self.get_logger().error("Mission upload failed")
 
-            if response.success:
-                self.mission_upload_client.get_logger().info(f"Mission upload succeeded: {response.success}")
-            else:
-                self.mission_upload_client.get_logger().error(f"Mission upload failed: {response.success}")
-            
-            self.mission_upload_sess.reset() # Reset fields -- prepare for next upload sess
-
+        self.mission_upload_sess.reset()
+    
     def handle_command_long(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
         Handles COMMAND_LONG sent from QGC.
