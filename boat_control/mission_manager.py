@@ -3,7 +3,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, GoalWaypoint, VehicleSupervisorState, GPS
+from boat_iface.msg import GoalWaypoint, GPS, MissionItems, VehicleSupervisorState
 from boat_iface.srv import UploadMission, FlightModeChange
 
 from boat_control.Mission import Mission, MissionType
@@ -25,6 +25,13 @@ class MissionManager(Node):
         self.long: int | None = None
         #######################
 
+        #### PARAMETERS ####
+        self.declare_parameter('use_sim_gps', False)
+        self.use_sim_gps = self.get_parameter(
+            'use_sim_gps'
+        ).get_parameter_value().bool_value
+        ####################
+
         #### SERVERS ####
         self.mission_upload_srv = self.create_service(UploadMission, 'upload_mission', self.upload_mission_cb)
         #################
@@ -35,6 +42,11 @@ class MissionManager(Node):
 
         #### PUBLISHERS #####
         self.goal_waypoint_pub = self.create_publisher(GoalWaypoint, '/mission/goal_waypoint', 10)
+        self.sim_mission_items_pub = None
+        if self.use_sim_gps:
+            self.sim_mission_items_pub = self.create_publisher(
+                MissionItems, '/simulation/mission_items', 10
+            )
         self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.supervisor_state_sub_cb, 10)
         #####################
 
@@ -50,6 +62,10 @@ class MissionManager(Node):
             self.state = MissionState.NOT_STARTED
             response.success = True
             self.state = MissionState.NOT_STARTED
+            if self.sim_mission_items_pub is not None:
+                mission_items = MissionItems()
+                mission_items.items = request.items
+                self.sim_mission_items_pub.publish(mission_items)
             self.get_logger().info(f"Mission Upload Success")
         else:
             response.success = False
@@ -86,11 +102,14 @@ class MissionManager(Node):
             case MissionState.ACTIVE:
                 self.get_logger().info(f"arm: {self.cache.arm_state}, mode: {self.cache.flight_mode}")
                 if self.cache.arm_state == True:
-                    #if self.cache.flight_mode == FlightMode.GUIDED:
-                    if (self.lat is not None) and (self.long is not None):
-                        self.publish_goal_waypoint()
+                    if self.cache.flight_mode == FlightMode.GUIDED:
+                        if (self.lat is not None) and (self.long is not None):
+                            self.publish_goal_waypoint()
+                    else:
+                        self.state = MissionState.PAUSED
             case MissionState.PAUSED:
-                pass
+                if self.cache.flight_mode == FlightMode.GUIDED:
+                    self.state = MissionState.ACTIVE
             case MissionState.COMPLETED:
                 pass
             case MissionState.ABORTED:
@@ -104,13 +123,14 @@ class MissionManager(Node):
         goal_waypoint = GoalWaypoint()
         goal_waypoint.x = current_waypoint.x
         goal_waypoint.y = current_waypoint.y
-        self.get_logger().info(f'{format(goal_waypoint.x / 1e7, ".12f")}')
+        self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
+        self.get_logger().info(f'GOAL LAT: {format(goal_waypoint.x / 1e7, ".12f")}, LON: {format(goal_waypoint.y / 1e7, ".12f")} ')
 
         ### TEST ####
         self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
         #############
         
-        if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7) <= 10:
+        if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, 2):
             if not (self.mission.current_item >= self.mission.num_items - 1):
                 self.mission.current_item += 1
 
