@@ -81,3 +81,6 @@ def goal_is_reached(
 
 def clamp(val, minimum, maximum):
     return max(minimum, min(val, maximum))
+
+def int_map(val, in_min, in_max, out_min, out_max) -> int:
+    return int(out_min + (out_max - out_min) / (in_max - in_min) * (val - in_min))

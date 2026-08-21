@@ -11,7 +11,7 @@ class ThrusterPIDControl:
         self.coeffs = ctrl_coeffs
         self.last_ctrl_time = None
 
-    def controller(self, lat, lon, goal_lat, goal_lon, hdg) -> Tuple[int, int]:
+    def calc_control(self, lat, lon, goal_lat, goal_lon, hdg) -> Tuple[int, int]:
         # Distance controller
         dist_err = distance_between_coordinates(goal_lat, goal_lon, lat, lon)
 
@@ -62,8 +62,3 @@ class ThrusterPIDControl:
         right_power = right_power / norm_factor
 
         return left_power, right_power
-
-
-
-
-    

@@ -1,4 +1,4 @@
-import serial
+import serial, struct
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -9,6 +9,7 @@ from boat_control.Mission import Mission, MissionType
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
 from boat_control.data.ctrl_coeffs import CtrlCoeffs
+from boat_control.controllers.thruster_waypoint_pid_ctrl import ThrusterPIDControl
 
 class VehicleController(Node):
     def __init__(self):
@@ -29,6 +30,10 @@ class VehicleController(Node):
         self.goal_lat: int | None = None
         self.goal_lon: int | None = None
         ###################
+
+        ### Member objects ###
+        self.controller = ThrusterPIDControl(CtrlCoeffs)
+        ######################
         
         try:
             self.serial_port = serial.Serial(
@@ -76,10 +81,12 @@ class VehicleController(Node):
         self.goal_lat = msg.x / 1e7
         self.goal_lon = msg.y / 1e7
 
-
-
     def send_motor_command(self, left_power, right_power):
-        pass
+        left_power = int_map(left_power, -1, 1, -128, 127)
+        right_power = int_map(right_power, -1, 1, -128, 127)
+
+        self.serial_port.write(b'L' + struct.pack('b', left_power))
+        self.serial_port.write(b'R' + struct.pack('b', righ_power))
 
     def loop(self):
         if not self.cache.arm_state:
@@ -92,11 +99,20 @@ class VehicleController(Node):
                 # Execute manual commands
                 pass
             case FlightMode.GUIDED:
-                left_power, right_power = self.thruster_controller()
+                
+                # Path following controller
+
+                # Outputs -1 to 1
+                left_power, right_power = controller.calc_control(
+                    self.lat,
+                    self.lon,
+                    self.goal_lat,
+                    self.goal_lon,
+                    self.hdg
+                )
+                
+                # Sends to ESC. Scales to appropriate range
                 self.send_motor_command(left_power, right_power)
-            
-                # Path Following controller
-                pass
             case _:
                 pass
 
