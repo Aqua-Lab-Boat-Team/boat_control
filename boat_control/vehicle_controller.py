@@ -97,7 +97,7 @@ class VehicleController(Node):
                 pass
             case FlightMode.MANUAL:
                 # Execute manual commands
-                pass
+                
             case FlightMode.GUIDED:
                 
                 # Path following controller

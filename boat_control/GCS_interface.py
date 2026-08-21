@@ -13,10 +13,10 @@ from rclpy.qos import qos_profile_sensor_data
 
 # Message Type Imports
 from std_msgs.msg import String
-from boat_iface.msg import MissionItemInt, VehicleSupervisorState, GPS
+from boat_iface.msg import MissionItemInt, VehicleSupervisorState, GPS, ManualControl
 
 # Service Type Imports
-from boat_iface.srv import UploadMission
+from boat_iface.srv import UploadMission, FlightModeChange
 
 # pymavlink helper library for MAVLink communication
 from pymavlink import mavutil
@@ -26,6 +26,7 @@ from boat_control.MissionUploadSession import MissionUploadSession
 from boat_control.MissionItem import MissionItem
 from boat_control.services.mission_upload_client import MissionUploadClient
 from boat_control.services.arm_disarm_client import ArmDisarmClient
+from boat_control.services.flight_mode_change_client import FlightModeChangeClient
 from boat_control.data.comms_config import CommsConfig
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
@@ -76,11 +77,15 @@ class GCSInterface(Node):
         self.mission_upload_sess = MissionUploadSession()   # Store state relevant to current mission upload
         self.cache = SupervisorStateCache()
         
-        ### CLIENTS ####
+        ### CLIENTS ###
         self.mission_upload_client = MissionUploadClient(self)  # Client for sending complete mission to mission manager
         self.arm_disarm_client = ArmDisarmClient()          # Client for arming and disarming the vehicle
-        ################
+        self.flight_mode_change_client = FlightModeChangeClient()
+        ###############
 
+        ### PUBLISHERS ###
+        self.man_ctrl_pub = self.create_publisher(ManualControl, '/vehicle/manual_control', 10)
+        ##################
 
         ### SUBSCRIPTIONS ###
         self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.vehicle_supervisor_state_sub_cb, 10)
@@ -168,8 +173,23 @@ class GCSInterface(Node):
             handler(msg, self.master)
 
     def handle_manual_control(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        if self.cache.flight_mode != FlightMode.MANUAL:
-            self.get_logger().info("MANUAL CONTROL")
+        if self.cache.flight_mode != FlightMode.MANUAL and self.cache.arm_state == True:
+            self.get_logger().info("Requesting Manual Mode...")
+            future = self.flight_mode_change_client.send_request(FlightMode.MANUAL)
+            rclpy.spin_until_future_complete(self.flight_mode_change_client, future)
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Manual mode granted!")
+        
+        self.get_logger().info(f'{m}')
+        msg = ManualControl()
+        msg.x = m.x
+        msg.y = m.y
+        msg.r = m.r 
+        msg.z = m.z
+
+        self.man_ctrl_pub.publish(msg)
+
 
     def handle_param_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
