@@ -3,6 +3,7 @@ import math
 
 EARTH_RADIUS_M = 6_371_000.0
 
+
 def distance_between_coordinates(
     lat1_deg: float,
     lon1_deg: float,
@@ -36,6 +37,32 @@ def distance_between_coordinates(
     return EARTH_RADIUS_M * c
 
 
+def angle_between_coordinates(
+    lat1_deg: float,
+    lon1_deg: float,
+    lat2_deg: float,
+    lon2_deg: float,
+) -> float:
+    """
+    Calculate the bearing from the first coordinate to the second.
+
+    Uses a locally flat approximation suitable for nearby coordinates. The
+    returned angle is in degrees in the range [0, 360), measured clockwise
+    from north (north=0, east=90, south=180, west=270).
+    """
+    mean_lat_rad = math.radians((lat1_deg + lat2_deg) / 2.0)
+    delta_lat = lat2_deg - lat1_deg
+    delta_lon = (lon2_deg - lon1_deg + 180.0) % 360.0 - 180.0
+
+    north = delta_lat
+    east = delta_lon * math.cos(mean_lat_rad)
+
+    return math.degrees(math.atan2(east, north)) % 360.0
+
+
+def wrap_angle_deg(angle:float) -> float:
+    return ((angle + 180) % 360) - 180
+
 def goal_is_reached(
     current_lat: float,
     current_lon: float,
@@ -51,3 +78,6 @@ def goal_is_reached(
     )
 
     return distance_m <= tolerance_m
+
+def clamp(val, minimum, maximum):
+    return max(minimum, min(val, maximum))

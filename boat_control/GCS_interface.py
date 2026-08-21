@@ -168,14 +168,8 @@ class GCSInterface(Node):
             handler(msg, self.master)
 
     def handle_manual_control(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        master.mav.manual_control_send(
-            target=m.target,
-            x=m.x,
-            y=m.y,
-            z=m.z,
-            r=m.r,
-            buttons=m.buttons
-        )
+        if self.cache.flight_mode != FlightMode.MANUAL:
+            self.get_logger().info("MANUAL CONTROL")
 
     def handle_param_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         """
