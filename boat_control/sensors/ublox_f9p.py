@@ -16,7 +16,7 @@ class UbloxGpsNode(Node):
         super().__init__("ublox_gps")
 
         # Change these through ROS parameters when launching the node.
-        self.declare_parameter("port", "/dev/ttyACM0")
+        self.declare_parameter("port", "/dev/ttyACM2")
         self.declare_parameter("baudrate", 38400)
 
         # "relpos": dual-antenna moving-base heading from NAV-RELPOSNED
@@ -124,7 +124,7 @@ class UbloxGpsNode(Node):
             self.heading_deg = None
             return
 
-        self.heading_deg = float(ubx_message.relPosHeading) % 360.0
+        self.heading_deg = (float(ubx_message.relPosHeading) +90) % 360.0
 
     def handle_nav_pvt(self, ubx_message) -> None:
         fix_valid = bool(getattr(ubx_message, "gnssFixOk", 0))

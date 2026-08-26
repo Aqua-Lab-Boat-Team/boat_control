@@ -28,6 +28,7 @@ setup(
             'mission_manager = boat_control.mission_manager:main',
             'gcs_interface = boat_control.GCS_interface:main',
             'gps = boat_control.sensors.ublox_f9p:main',
+            'vehicle_controller = boat_control.vehicle_controller:main',
             'vehicle_supervisor = boat_control.vehicle_supervisor:main',
             'sim_gps = boat_control.simulation.sensors.sim_gps:main'
         ],

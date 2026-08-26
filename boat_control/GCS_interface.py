@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Standard Python module for time handling
-import time
+import time, math
 
 # ROS 2 Python library
 import rclpy
@@ -114,6 +114,16 @@ class GCSInterface(Node):
             int(msg.vz),
             int(msg.heading),
         )
+        
+        self.master.mav.attitude_send(
+            int(millis() - self.start_time),
+            0.0,                 # roll [rad]
+            0.0,                 # pitch [rad]
+            msg.heading * math.pi / 180,         # yaw [rad]
+            0.0,                 # roll speed [rad/s]
+            0.0,                 # pitch speed [rad/s]
+            0.0,                 # yaw speed [rad/s]
+        )
     #######################
 
     def establish_gcs_connection(self):
@@ -181,7 +191,6 @@ class GCSInterface(Node):
             if response.success:
                 self.get_logger().info("Manual mode granted!")
         
-        self.get_logger().info(f'{m}')
         msg = ManualControl()
         msg.x = m.x
         msg.y = m.y
@@ -374,16 +383,17 @@ class GCSInterface(Node):
             errors_count4=0
         )
 
-        master.mav.attitude_quaternion_send(
-            time_boot_ms=millis(),
-            q1=1.0,
-            q2=0.0,
-            q3=0.0,
-            q4=0.0,
-            rollspeed=0.0,
-            pitchspeed=0.0,
-            yawspeed=0.0
-        )
+        # master.mav.attitude_quaternion_send(
+        #     time_boot_ms=millis(),
+        #     q1=1.0,
+        #     q2=0.0,
+        #     q3=0.0,
+        #     q4=0.0,
+        #     rollspeed=0.0,
+        #     pitchspeed=0.0,
+        #     yawspeed=0.0
+        # )
+
 
 def main() -> None:
     rclpy.init()

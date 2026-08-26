@@ -93,14 +93,14 @@ class MissionManager(Node):
             case MissionState.NO_MISSION:
                 pass 
             case MissionState.NOT_STARTED:
-                if self.cache.arm_state:
+                if self.cache.arm_state and self.cache.flight_mode != FlightMode.MANUAL:
                     response = self.request_guided_mode()
                     self.get_logger().info("Requesting Guided Mode...")
                     if response.success:
                         self.state = MissionState.ACTIVE
                         self.get_logger().info("Guided mode granted! Running mission...")
             case MissionState.ACTIVE:
-                self.get_logger().info(f"arm: {self.cache.arm_state}, mode: {self.cache.flight_mode}")
+                self.get_logger().info(f"MISSION ACTIVE")
                 if self.cache.arm_state == True:
                     if self.cache.flight_mode == FlightMode.GUIDED:
                         if (self.lat is not None) and (self.long is not None):
@@ -123,11 +123,11 @@ class MissionManager(Node):
         goal_waypoint = GoalWaypoint()
         goal_waypoint.x = current_waypoint.x
         goal_waypoint.y = current_waypoint.y
-        self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
+        # self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
         self.get_logger().info(f'GOAL LAT: {format(goal_waypoint.x / 1e7, ".12f")}, LON: {format(goal_waypoint.y / 1e7, ".12f")} ')
 
         ### TEST ####
-        self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
+        # self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
         #############
         
         if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, 2):

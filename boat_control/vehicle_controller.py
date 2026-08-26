@@ -3,13 +3,15 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState, GoalWaypoint
+from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState, GoalWaypoint, ManualControl, GPS
 from boat_iface.srv import ArmDisarm, FlightModeChange
 from boat_control.Mission import Mission, MissionType
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
 from boat_control.data.ctrl_coeffs import CtrlCoeffs
 from boat_control.controllers.thruster_waypoint_pid_ctrl import ThrusterPIDControl
+from boat_control.helpers.math_helpers import *
+from rclpy.qos import qos_profile_sensor_data
 
 class VehicleController(Node):
     def __init__(self):
@@ -17,7 +19,7 @@ class VehicleController(Node):
         
         self.cache = SupervisorStateCache()
 
-        self.declare_parameter("port", "/dev/ttyACM0")
+        self.declare_parameter("port", "/dev/ttyACM1")
         self.declare_parameter("baudrate", 115200)
         port = str(self.get_parameter("port").value)
         baudrate = int(self.get_parameter("baudrate").value)
@@ -29,6 +31,14 @@ class VehicleController(Node):
 
         self.goal_lat: int | None = None
         self.goal_lon: int | None = None
+
+        self.x = 0
+        self.y = 0
+        self.r = 0
+        self.z = 0
+
+        self.last_left = 0
+        self.last_right = 0
         ###################
 
         ### Member objects ###
@@ -51,7 +61,7 @@ class VehicleController(Node):
             raise
 
         self.get_logger().info(
-            f"Vehicle controller UART connected on {port} at {baudrate} baud"
+            f"Arduino UART {port} at {baudrate} baud"
         )
         
         ### SUBSCRIPTIONS ###
@@ -64,9 +74,22 @@ class VehicleController(Node):
 
         self.gps_sub = self.create_subscription(GPS, '/vehicle/sensors/gps', self.gps_sub_cb, qos_profile_sensor_data)
         self.goal_sub = self.create_subscription(GoalWaypoint, '/mission/goal_waypoint', self.waypoint_sub_cb, 10)
+        self.man_ctrl_sub = self.create_subscription(ManualControl, '/vehicle/manual_control', self.manual_control_sub_cb, 10)
         ######################
-        
+        # left_power, right_power = self.controller.calc_control(
+        #             self.lat,
+        #             self.lon,
+        #             self.goal_lat,
+        #             self.goal_lon,
+        #             self.hdg
+        #         )
         self.timer = self.create_timer(0.01, self.loop)
+
+    def manual_control_sub_cb(self, msg) -> None:
+        self.x = msg.x
+        self.y = msg.y
+        self.r = msg.r 
+        self.z = msg.z 
 
     def vehicle_supervisor_state_sub_cb(self, msg) -> None:
         self.cache.arm_state = msg.armed
@@ -82,39 +105,56 @@ class VehicleController(Node):
         self.goal_lon = msg.y / 1e7
 
     def send_motor_command(self, left_power, right_power):
+        left_power = clamp(left_power, self.last_left -1/100, self.last_left + 1/100)
+        right_power = clamp(right_power, self.last_right -1/100, self.last_right + 1/100)
+
+        left_power = clamp(left_power, -0.75, 0.75)
+        right_power = clamp(right_power, -0.75, 0.75)
+
+
+        self.last_left = left_power
+        self.last_right = right_power
+        
         left_power = int_map(left_power, -1, 1, -128, 127)
         right_power = int_map(right_power, -1, 1, -128, 127)
-
-        self.serial_port.write(b'L' + struct.pack('b', left_power))
-        self.serial_port.write(b'R' + struct.pack('b', righ_power))
-
+        
+        command = f"{left_power} {right_power}\n"
+        self.get_logger().info(command)
+        self.serial_port.write( command.encode("ascii") )
+        
     def loop(self):
-        if not self.cache.arm_state:
-            return
+        self.get_logger().info(f"MODE: {self.cache.flight_mode}")
+        if self.cache.arm_state == True:
+            match self.cache.flight_mode:
+                case FlightMode.HOLD:
+                    pass
+                case FlightMode.MANUAL:
+                    # Execute manual commands
+                    left_power = map(self.z, 0, 1000, -1, 1)
+                    right_power = map(self.x, -1000, 1000, -1, 1)
 
-        match self.cache.flight_mode:
-            case FlightMode.HOLD:
-                pass
-            case FlightMode.MANUAL:
-                # Execute manual commands
-                
-            case FlightMode.GUIDED:
-                
-                # Path following controller
-
-                # Outputs -1 to 1
-                left_power, right_power = controller.calc_control(
-                    self.lat,
-                    self.lon,
-                    self.goal_lat,
-                    self.goal_lon,
-                    self.hdg
-                )
-                
-                # Sends to ESC. Scales to appropriate range
-                self.send_motor_command(left_power, right_power)
-            case _:
-                pass
+                    self.send_motor_command(left_power, right_power)
+                    
+                case FlightMode.GUIDED:
+                    
+                    # Path following controller
+                    # Outputs -1 to 1
+                    if self.goal_lat != None and self.goal_lon !=None:
+                        left_power, right_power = self.controller.calc_control(
+                            self.lat,
+                            self.lon,
+                            self.goal_lat,
+                            self.goal_lon,
+                            self.hdg
+                        )
+                    else:
+                        left_power = 0
+                        right_power = 0
+                    self.get_logger().info(f"L: {left_power}, R: {right_power}")
+                    # Sends to ESC. Scales to appropriate range
+                    self.send_motor_command(left_power, right_power)
+                case _:
+                    pass
 
     def destroy_node(self) -> None:
         if hasattr(self, "serial_port") and self.serial_port.is_open:

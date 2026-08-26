@@ -48,6 +48,7 @@ class VehicleSupervisor(Node):
                 response.err = 0
                 response.message = 'success'
                 self.armed = False
+                self.flight_mode = FlightMode.HOLD
 
         self.get_logger().info(f"RECV: {request}")
         return response

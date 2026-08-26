@@ -32,6 +32,10 @@ def generate_launch_description():
         ),
         Node(
             package='boat_control',
+            executable='vehicle_controller',
+        ),
+        Node(
+            package='boat_control',
             executable='sim_gps',
         )
     ])

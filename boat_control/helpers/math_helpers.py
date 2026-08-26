@@ -84,3 +84,6 @@ def clamp(val, minimum, maximum):
 
 def int_map(val, in_min, in_max, out_min, out_max) -> int:
     return int(out_min + (out_max - out_min) / (in_max - in_min) * (val - in_min))
+
+def map(val, in_min, in_max, out_min, out_max):
+    return out_min + (out_max - out_min) / (in_max - in_min) * (val - in_min)
