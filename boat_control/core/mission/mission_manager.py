@@ -6,11 +6,11 @@ from rclpy.qos import qos_profile_sensor_data
 from boat_iface.msg import GoalWaypoint, GPS, MissionItems, VehicleSupervisorState
 from boat_iface.srv import UploadMission, FlightModeChange
 
-from boat_control.Mission import Mission, MissionType
+from boat_control.core.mission.Mission import Mission, MissionType
 from boat_control.enums.mission_state import MissionState
 from boat_control.enums.flight_mode import FlightMode
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
-from boat_control.services.flight_mode_change_client import FlightModeChangeClient
+from boat_control.core.services.flight_mode_change_client import FlightModeChangeClient
 
 from boat_control.helpers.math_helpers import distance_between_coordinates, goal_is_reached
 
@@ -100,7 +100,6 @@ class MissionManager(Node):
                         self.state = MissionState.ACTIVE
                         self.get_logger().info("Guided mode granted! Running mission...")
             case MissionState.ACTIVE:
-                self.get_logger().info(f"MISSION ACTIVE")
                 if self.cache.arm_state == True:
                     if self.cache.flight_mode == FlightMode.GUIDED:
                         if (self.lat is not None) and (self.long is not None):
@@ -124,7 +123,7 @@ class MissionManager(Node):
         goal_waypoint.x = current_waypoint.x
         goal_waypoint.y = current_waypoint.y
         # self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
-        self.get_logger().info(f'GOAL LAT: {format(goal_waypoint.x / 1e7, ".12f")}, LON: {format(goal_waypoint.y / 1e7, ".12f")} ')
+        #self.get_logger().info(f'GOAL LAT: {format(goal_waypoint.x / 1e7, ".12f")}, LON: {format(goal_waypoint.y / 1e7, ".12f")} ')
 
         ### TEST ####
         # self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')

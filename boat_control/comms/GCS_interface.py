@@ -22,11 +22,11 @@ from boat_iface.srv import UploadMission, FlightModeChange
 from pymavlink import mavutil
 
 # Local Imports
-from boat_control.MissionUploadSession import MissionUploadSession
-from boat_control.MissionItem import MissionItem
-from boat_control.services.mission_upload_client import MissionUploadClient
-from boat_control.services.arm_disarm_client import ArmDisarmClient
-from boat_control.services.flight_mode_change_client import FlightModeChangeClient
+from boat_control.core.mission.MissionUploadSession import MissionUploadSession
+from boat_control.core.mission.MissionItem import MissionItem
+from boat_control.core.services.mission_upload_client import MissionUploadClient
+from boat_control.core.services.arm_disarm_client import ArmDisarmClient
+from boat_control.core.services.flight_mode_change_client import FlightModeChangeClient
 from boat_control.data.comms_config import CommsConfig
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
@@ -129,13 +129,12 @@ class GCSInterface(Node):
     def establish_gcs_connection(self):
         if not self.comms_config.USE_UDP:
             return mavutil.mavlink_connection(
-                self.comms_config.UART_PORT,
-                baud=self.comms_config.UART_BAUD,
+                self.comms_config.RADIO_UART_PORT,
+                baud=self.comms_config.RADIO_UART_BAUD,
                 source_system=self.comms_config.MVL_SYSID,
                 source_component=self.comms_config.MVL_COMPID
             )
         else:
-            print("UDP")
             return mavutil.mavlink_connection (
                 self.comms_config.UDP_PORT,
                 source_system=self.comms_config.MVL_SYSID,

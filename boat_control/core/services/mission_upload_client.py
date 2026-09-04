@@ -1,5 +1,5 @@
 from rclpy.node import Node
-from boat_control.MissionItem import MissionItem
+from boat_control.core.mission.MissionItem import MissionItem
 from boat_iface.msg import MissionItemInt
 from boat_iface.srv import UploadMission
 

@@ -4,7 +4,7 @@ from rclpy.node import Node
 
 from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState
 from boat_iface.srv import ArmDisarm, FlightModeChange
-from boat_control.Mission import Mission, MissionType
+from boat_control.core.mission.Mission import Mission, MissionType
 from boat_control.enums.flight_mode import FlightMode
 
 class VehicleSupervisor(Node):
@@ -15,6 +15,8 @@ class VehicleSupervisor(Node):
         self.armed = False
         self.flight_mode = FlightMode.HOLD
         ####################################
+
+
         self.vehicle_supervisor_state_pub = self.create_publisher(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', 10)
         self.vehicle_supervisor_state_pub_timer = self.create_timer(0.05, self.vehicle_supervisor_state_pub_cb)
         self.arm_disarm_srv = self.create_service(ArmDisarm, 'arm_disarm', self.arm_disarm_cb)
