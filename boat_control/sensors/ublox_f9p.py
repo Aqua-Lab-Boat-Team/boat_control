@@ -6,6 +6,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Float64MultiArray
+from boat_control.data.comms_config import CommsConfig
 from boat_iface.msg import GPS
 
 from pyubx2 import UBXReader, UBX_PROTOCOL, NMEA_PROTOCOL
@@ -16,8 +17,8 @@ class UbloxGpsNode(Node):
         super().__init__("ublox_gps")
 
         # Change these through ROS parameters when launching the node.
-        self.declare_parameter("port", "/dev/ttyACM2")
-        self.declare_parameter("baudrate", 38400)
+        self.declare_parameter("port", CommsConfig.GPS_UART_PORT)
+        self.declare_parameter("baudrate", CommsConfig.GPS_UART_BAUD)
 
         # "relpos": dual-antenna moving-base heading from NAV-RELPOSNED
         # "motion": course over ground from NAV-PVT

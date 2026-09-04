@@ -15,7 +15,6 @@ class VehicleSupervisor(Node):
         self.armed = False
         self.flight_mode = FlightMode.HOLD
         ####################################
-        
         self.vehicle_supervisor_state_pub = self.create_publisher(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', 10)
         self.vehicle_supervisor_state_pub_timer = self.create_timer(0.05, self.vehicle_supervisor_state_pub_cb)
         self.arm_disarm_srv = self.create_service(ArmDisarm, 'arm_disarm', self.arm_disarm_cb)

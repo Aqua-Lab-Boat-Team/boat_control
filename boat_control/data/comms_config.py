@@ -7,8 +7,14 @@ class CommsConfig:
     UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
     # UDP_PORT:str = "udpout:192.168.10.2:14550" # Raspberry pi
 
-    UART_PORT:str = "/dev/ttyACM0"
-    UART_BAUD:int = 115200
+    RADIO_UART_PORT:str = "/dev/radio"
+    RADIO_UART_BAUD:int = 115200
+
+    GPS_UART_PORT:str = "/dev/gps"
+    GPS_UART_BAUD:int = 38400
+
+    ARDUINO_UART_PORT:str = "/dev/arduino"
+    ARDUINO_UART_BAUD:int = 115200
 
     MVL_SYSID:int = 1
     MVL_COMPID:int = 1

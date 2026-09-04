@@ -3,7 +3,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState, GoalWaypoint, ManualControl, GPS
+from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState, GoalWaypoint, ManualControl, GPS, MotorPower
 from boat_iface.srv import ArmDisarm, FlightModeChange
 from boat_control.Mission import Mission, MissionType
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
@@ -11,6 +11,7 @@ from boat_control.enums.flight_mode import FlightMode
 from boat_control.data.ctrl_coeffs import CtrlCoeffs
 from boat_control.controllers.thruster_waypoint_pid_ctrl import ThrusterPIDControl
 from boat_control.helpers.math_helpers import *
+from boat_control.data.comms_config import CommsConfig
 from rclpy.qos import qos_profile_sensor_data
 
 class VehicleController(Node):
@@ -19,10 +20,20 @@ class VehicleController(Node):
         
         self.cache = SupervisorStateCache()
 
-        self.declare_parameter("port", "/dev/ttyACM1")
-        self.declare_parameter("baudrate", 115200)
-        port = str(self.get_parameter("port").value)
-        baudrate = int(self.get_parameter("baudrate").value)
+        #### PARAMETERS ####
+        self.declare_parameter('use_sim_boat', False)
+        self.use_sim_boat = self.get_parameter(
+            'use_sim_boat'
+        ).get_parameter_value().bool_value
+        ####################
+
+        if not self.use_sim_boat:
+            self.declare_parameter("port", CommsConfig.ARDUINO_UART_PORT)
+            self.declare_parameter("baudrate", CommsConfig.ARDUINO_UART_BAUD)
+            port = str(self.get_parameter("port").value)
+            baudrate = int(self.get_parameter("baudrate").value)
+        else:
+            self.motor_controller_sim_pub = self.create_publisher(MotorPower, '/vehicle/motor_power', 10)
 
         ### Local state ###
         self.lat: int | None = None
@@ -45,24 +56,27 @@ class VehicleController(Node):
         self.controller = ThrusterPIDControl(CtrlCoeffs)
         ######################
         
-        try:
-            self.serial_port = serial.Serial(
-                port=port,
-                baudrate=baudrate,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=0.1,
-            )
-        except serial.SerialException as error:
-            self.get_logger().fatal(
-                f"Could not open vehicle controller UART {port}: {error}"
-            )
-            raise
+        if not self.use_sim_boat:
+            try:
+                self.serial_port = serial.Serial(
+                    port=port,
+                    baudrate=baudrate,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=0.1,
+                )
+            except serial.SerialException as error:
+                self.get_logger().fatal(
+                    f"Could not open vehicle controller UART {port}: {error}"
+                )
+                raise
 
-        self.get_logger().info(
-            f"Arduino UART {port} at {baudrate} baud"
-        )
+            self.get_logger().info(
+                f"Arduino UART {port} at {baudrate} baud"
+            )
+        else:
+            self.get_logger().info("Connected to virtual boat")
         
         ### SUBSCRIPTIONS ###
         self.vehicle_supervisor_state_sub = self.create_subscription(
@@ -108,9 +122,12 @@ class VehicleController(Node):
         left_power = clamp(left_power, self.last_left -1/100, self.last_left + 1/100)
         right_power = clamp(right_power, self.last_right -1/100, self.last_right + 1/100)
 
-        left_power = clamp(left_power, -0.75, 0.75)
-        right_power = clamp(right_power, -0.75, 0.75)
+        ### Change to map instead of clamp to avoid saturating the controller
+        # left_power = clamp(left_power, -0.75, 0.75)
+        # right_power = clamp(right_power, -0.75, 0.75)
 
+        left_power = map(left_power, -1, 1, -0.75, 0.75)
+        right_power = map(right_power, -1, 1, -0.75, 0.75)
 
         self.last_left = left_power
         self.last_right = right_power
@@ -120,8 +137,15 @@ class VehicleController(Node):
         
         command = f"{left_power} {right_power}\n"
         self.get_logger().info(command)
-        self.serial_port.write( command.encode("ascii") )
-        
+
+        if not self.use_sim_boat:
+            self.serial_port.write( command.encode("ascii") )
+        else:
+            msg = MotorPower()
+            msg.left_power = left_power
+            msg.right_power = right_power
+            self.self.motor_controller_sim_pub.publish(msg)
+
     def loop(self):
         self.get_logger().info(f"MODE: {self.cache.flight_mode}")
         if self.cache.arm_state == True:

@@ -13,6 +13,11 @@ def generate_launch_description():
             default_value='false',
             description='Use simulated GPS instead of real GPS'
         ),
+        DeclareLaunchArgument(
+            'use_sim_boat',
+            default_value='false',
+            description='Use simulated boat'
+        ),
         Node(
             package='boat_control',
             executable='gcs_interface',
@@ -33,9 +38,20 @@ def generate_launch_description():
         Node(
             package='boat_control',
             executable='vehicle_controller',
+            parameters=[
+                {
+                    'use_sim_boat': use_sim_boat
+                }
+            ],
         ),
         Node(
             package='boat_control',
             executable='sim_gps',
-        )
+            condition=IfCondition(use_sim_gps)
+        ),
+        Node(
+            package='boat_control',
+            executable='sim_boat',
+            condition=IfCondition(use_sim_boat)
+        ),
     ])
