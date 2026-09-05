@@ -4,8 +4,8 @@ from dataclasses import dataclass
 class CommsConfig:
 
     USE_UDP:bool = True # UDP or UART -- Default to UDP
-    UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
-    # UDP_PORT:str = "udpout:192.168.10.2:14550" # Raspberry pi
+    #UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
+    UDP_PORT:str = "udpout:192.168.10.2:14550" # Raspberry pi
 
     RADIO_UART_PORT:str = "/dev/radio"
     RADIO_UART_BAUD:int = 115200
