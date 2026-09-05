@@ -37,7 +37,7 @@ class MissionManager(Node):
         #################
 
         #### CLIENTS ####
-        self.flight_mode_change_client = FlightModeChangeClient()
+        self.flight_mode_change_client = FlightModeChangeClient(self)
         #################
 
         #### PUBLISHERS #####
@@ -94,11 +94,8 @@ class MissionManager(Node):
                 pass 
             case MissionState.NOT_STARTED:
                 if self.cache.arm_state and self.cache.flight_mode != FlightMode.MANUAL:
-                    response = self.request_guided_mode()
                     self.get_logger().info("Requesting Guided Mode...")
-                    if response.success:
-                        self.state = MissionState.ACTIVE
-                        self.get_logger().info("Guided mode granted! Running mission...")
+                    self.request_guided_mode()
             case MissionState.ACTIVE:
                 if self.cache.arm_state == True:
                     if self.cache.flight_mode == FlightMode.GUIDED:
@@ -141,9 +138,13 @@ class MissionManager(Node):
 
     def request_guided_mode(self):
         future = self.flight_mode_change_client.send_request(FlightMode.GUIDED)
-        rclpy.spin_until_future_complete(self.flight_mode_change_client, future)
+        future.add_done_callback(self.request_guide_mode_cb)
+
+    def request_guide_mode_cb(self, future):
         response = future.result()
-        return response
+        if response.success:
+            self.state = MissionState.ACTIVE
+            self.get_logger().info("Guided mode granted! Running mission...")
 
     def gps_sub_cb(self, msg) -> None:
         self.lat = msg.latitude

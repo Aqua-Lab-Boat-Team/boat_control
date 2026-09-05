@@ -89,8 +89,8 @@ class GCSInterface(Node):
         
         ### CLIENTS ###
         self.mission_upload_client = MissionUploadClient(self)  # Client for sending complete mission to mission manager
-        self.arm_disarm_client = ArmDisarmClient()          # Client for arming and disarming the vehicle
-        self.flight_mode_change_client = FlightModeChangeClient()
+        self.arm_disarm_client = ArmDisarmClient(self)          # Client for arming and disarming the vehicle
+        self.flight_mode_change_client = FlightModeChangeClient(self)
         ###############
 
         ### PUBLISHERS ###
@@ -180,23 +180,28 @@ class GCSInterface(Node):
         if msg.get_srcSystem() == self.comms_config.GCS_SYSID:
             handler(msg, self.master)
 
+    def mode_change_complete(self, future):
+        response = future.result()
+        if(response.success):
+            self.get_logger().info("Mode Change Granted")
+        else:
+            self.get_logger().info("Mode Change failed")
+
     def handle_manual_control(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
         supervisor_state = self.state.get(VehicleSupervisorState)
         if supervisor_state.flight_mode != FlightMode.MANUAL and supervisor_state.armed == True:
             self.get_logger().info("Requesting Manual Mode...")
             future = self.flight_mode_change_client.send_request(FlightMode.MANUAL)
-            rclpy.spin_until_future_complete(self.flight_mode_change_client, future)
+            future.add_done_callback(self.mode_change_complete)
             response = future.result()
-            if response.success:
-                self.get_logger().info("Manual mode granted!")
-        
-        msg = ManualControl()
-        msg.x = m.x
-        msg.y = m.y
-        msg.r = m.r 
-        msg.z = m.z
+        else:
+            msg = ManualControl()
+            msg.x = m.x
+            msg.y = m.y
+            msg.r = m.r 
+            msg.z = m.z
 
-        self.man_ctrl_pub.publish(msg)
+            self.man_ctrl_pub.publish(msg)
 
 
     def handle_param_request_list(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
@@ -297,22 +302,24 @@ class GCSInterface(Node):
 
         # QGC is asking to arm or disarm
         elif cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
-
             future = self.arm_disarm_client.send_request(bool(m.param1))
-            rclpy.spin_until_future_complete(self.arm_disarm_client, future)
-            response = future.result()
-            self.arm_disarm_client.get_logger().info(f"{response.message}")
+            future.add_done_callback(self.arm_request_done)
+            
 
-            if response.success:
-                master.mav.command_ack_send(
-                    command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-                    result=mavutil.mavlink.MAV_RESULT_ACCEPTED,
-                )
-            else:
-                master.mav.command_ack_send(
-                    command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-                    result=mavutil.mavlink.MAV_RESULT_FAILED,
-                )
+    def arm_request_done(self, future):
+        response = future.result()
+        self.get_logger().info(f"{response.message}")
+
+        if response.success:
+            self.master.mav.command_ack_send(
+                command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                result=mavutil.mavlink.MAV_RESULT_ACCEPTED,
+            )
+        else:
+            self.master.mav.command_ack_send(
+                command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                result=mavutil.mavlink.MAV_RESULT_FAILED,
+            )
 
     def send_mission_request_int(self, master: mavutil.mavfile):
         """
