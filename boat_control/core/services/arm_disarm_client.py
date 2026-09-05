@@ -8,7 +8,7 @@ class ArmDisarmClient():
         self.node = node
         self.cli = self.node.create_client(ArmDisarm, 'arm_disarm')
         while not self.cli.wait_for_service(timeout_sec=0.5):
-            self.get_logger().info('Arm/Disarm not currently available. Retrying...')
+            self.node.get_logger().info('Arm/Disarm not currently available. Retrying...')
 
     def send_request(self, arm:bool):
         request = ArmDisarm.Request()      # Create a request

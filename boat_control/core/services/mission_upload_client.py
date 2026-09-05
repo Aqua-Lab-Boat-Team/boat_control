@@ -9,7 +9,7 @@ class MissionUploadClient():
         self.node = node
         self.cli = node.create_client(UploadMission, 'upload_mission')
         while not self.cli.wait_for_service(timeout_sec=0.5):
-            self.get_logger().info('Mission upload not available, waiting again...')
+            self.node.get_logger().info('Mission upload not available, waiting again...')
 
 
     def mission_item_to_msg(self, item: MissionItem):
