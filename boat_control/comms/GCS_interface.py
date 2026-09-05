@@ -28,8 +28,10 @@ from boat_control.core.services.mission_upload_client import MissionUploadClient
 from boat_control.core.services.arm_disarm_client import ArmDisarmClient
 from boat_control.core.services.flight_mode_change_client import FlightModeChangeClient
 from boat_control.data.comms_config import CommsConfig
-from boat_control.data.supervisor_state_cache import SupervisorStateCache
 from boat_control.enums.flight_mode import FlightMode
+from boat_control.core.state.definitions import *
+from boat_control.core.state.registry import *
+from boat_control.core.state.subscribed_state import SubscribedState
 
 
 sys_stat_count = 0
@@ -75,7 +77,15 @@ class GCSInterface(Node):
                 self.handle_mission_count,
         }
         self.mission_upload_sess = MissionUploadSession()   # Store state relevant to current mission upload
-        self.cache = SupervisorStateCache()
+
+        ### STATE ###
+        self.state = SubscribedState(self,
+            [
+                GPSState,
+                SupervisorState
+            ]
+        )
+        #############
         
         ### CLIENTS ###
         self.mission_upload_client = MissionUploadClient(self)  # Client for sending complete mission to mission manager
@@ -87,44 +97,9 @@ class GCSInterface(Node):
         self.man_ctrl_pub = self.create_publisher(ManualControl, '/vehicle/manual_control', 10)
         ##################
 
-        ### SUBSCRIPTIONS ###
-        self.vehicle_supervisor_state_sub = self.create_subscription(VehicleSupervisorState, '/vehicle/vehicle_supervisor_state', self.vehicle_supervisor_state_sub_cb, 10)
-        self.gps_sub = self.create_subscription(GPS, '/vehicle/sensors/gps', self.gps_sub_cb, qos_profile_sensor_data)
-        #####################
-
         self.t_last_hb = now_s()
         self.t_last_sys = now_s()
         self.timer = self.create_timer(0.01, self.loop)
-
-
-    ### SUBSCRIPTION CB ###
-    def vehicle_supervisor_state_sub_cb(self, msg):
-        self.cache.arm_state = msg.armed
-        self.cache.flight_mode = FlightMode(msg.flight_mode)
-
-    def gps_sub_cb(self, msg):
-        self.master.mav.global_position_int_send(
-            int(millis() - self.start_time),
-            int(msg.latitude * 1e7),
-            int(msg.longitude * 1e7),
-            int(0),
-            0,
-            int(msg.vx),
-            int(msg.vy),
-            int(msg.vz),
-            int(msg.heading),
-        )
-        
-        self.master.mav.attitude_send(
-            int(millis() - self.start_time),
-            0.0,                 # roll [rad]
-            0.0,                 # pitch [rad]
-            msg.heading * math.pi / 180,         # yaw [rad]
-            0.0,                 # roll speed [rad/s]
-            0.0,                 # pitch speed [rad/s]
-            0.0,                 # yaw speed [rad/s]
-        )
-    #######################
 
     def establish_gcs_connection(self):
         if not self.comms_config.USE_UDP:
@@ -171,6 +146,30 @@ class GCSInterface(Node):
                     print("MISSION UPLOAD TIMEOUT")
                     self.mission_upload_sess.reset()
 
+        gps = self.state.get(GPSState)
+        
+        self.master.mav.global_position_int_send(
+            int(millis() - self.start_time),
+            int(gps.latitude * 1e7),
+            int(gps.longitude * 1e7),
+            int(0),
+            0,
+            int(gps.vx),
+            int(gps.vy),
+            int(gps.vz),
+            int(gps.heading),
+        )
+    
+        self.master.mav.attitude_send(
+            int(millis() - self.start_time),
+            0.0,                 # roll [rad]
+            0.0,                 # pitch [rad]
+            gps.heading * math.pi / 180,         # yaw [rad]
+            0.0,                 # roll speed [rad/s]
+            0.0,                 # pitch speed [rad/s]
+            0.0,                 # yaw speed [rad/s]
+        )
+
     def handle_mavlink_message(self, msg):
         msg_id = msg.get_msgId()
         handler = self.message_handlers.get(msg_id)
@@ -182,7 +181,8 @@ class GCSInterface(Node):
             handler(msg, self.master)
 
     def handle_manual_control(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        if self.cache.flight_mode != FlightMode.MANUAL and self.cache.arm_state == True:
+        supervisor_state = self.state.get(VehicleSupervisorState)
+        if supervisor_state.flight_mode != FlightMode.MANUAL and supervisor_state.armed == True:
             self.get_logger().info("Requesting Manual Mode...")
             future = self.flight_mode_change_client.send_request(FlightMode.MANUAL)
             rclpy.spin_until_future_complete(self.flight_mode_change_client, future)
@@ -340,9 +340,10 @@ class GCSInterface(Node):
         """
         Send heartbeat periodically so QGC knows this MAVLink component is alive.
         """
+        supervisor_state = self.state.get(SupervisorState)
         base_mode = (
             mavutil.mavlink.MAV_MODE_MANUAL_ARMED
-            if self.cache.arm_state else mavutil.mavlink.MAV_MODE_MANUAL_DISARMED
+            if supervisor_state.armed else mavutil.mavlink.MAV_MODE_MANUAL_DISARMED
         )
 
         # Add custom mode enabled flag

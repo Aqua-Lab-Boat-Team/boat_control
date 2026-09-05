@@ -85,7 +85,7 @@ class VehicleController(Node):
         msg = MotorPower()
         msg.left_power = float(left_power)
         msg.right_power = float(right_power)
-        self.self.motor_controller_sim_pub.publish(msg)
+        self.motor_controller_sim_pub.publish(msg)
 
     def loop(self):
         if self.cache.arm_state == True:
