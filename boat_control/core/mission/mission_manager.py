@@ -95,7 +95,7 @@ class MissionManager(Node):
             case MissionState.NOT_STARTED:
                 if self.cache.arm_state and self.cache.flight_mode != FlightMode.MANUAL:
                     self.get_logger().info("Requesting Guided Mode...")
-                    self.mission_state = MissionState.PAUSED
+                    self.state = MissionState.PAUSED
                     self.request_guided_mode()
             case MissionState.ACTIVE:
                 if self.cache.arm_state == True:
