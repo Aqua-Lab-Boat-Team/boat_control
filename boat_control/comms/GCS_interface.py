@@ -188,7 +188,7 @@ class GCSInterface(Node):
             self.get_logger().info("Mode Change failed")
 
     def handle_manual_control(self, m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        supervisor_state = self.state.get(VehicleSupervisorState)
+        supervisor_state = self.state.get(SupervisorState)
         if supervisor_state.flight_mode != FlightMode.MANUAL and supervisor_state.armed == True:
             self.get_logger().info("Requesting Manual Mode...")
             future = self.flight_mode_change_client.send_request(FlightMode.MANUAL)

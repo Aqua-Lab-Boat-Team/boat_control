@@ -36,7 +36,7 @@ class LowLevelMotorControl(Node):
             f"Arduino UART {port} at {baudrate} baud"
         )
 
-        self.motor_power_subscriber = self.create_subscription(MotorPower, '/vehicle/motor_power', motor_power_cb, 10)
+        self.motor_power_subscriber = self.create_subscription(MotorPower, '/vehicle/motor_power', self.motor_power_cb, 10)
 
     def motor_power_cb(self, msg):
         # Collect from message

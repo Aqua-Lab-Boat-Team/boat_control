@@ -31,7 +31,9 @@ setup(
             'vehicle_controller = boat_control.core.vehicle_controller:main',
             'vehicle_supervisor = boat_control.core.vehicle_supervisor:main',
             'sim_gps = boat_control.simulation.sensors.sim_gps:main',
-            'sim_boat = boat_control.simulation.sim_boat:main' 
+            'sim_boat = boat_control.simulation.sim_boat:main',
+            'low_level_motor_controller = boat_control.core.hardware.low_level_motor_ctrl:main',
+            'heading_tuner = boat_control.core.tuning.heading_tuner:main'
         ],
     },
 )

@@ -42,6 +42,10 @@ def generate_launch_description():
         ),
         Node(
             package='boat_control',
+            executable='low_level_motor_controller'
+        ),
+        Node(
+            package='boat_control',
             executable='sim_gps',
             condition=IfCondition(use_sim_gps)
         )
