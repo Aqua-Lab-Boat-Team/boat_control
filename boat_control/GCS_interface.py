@@ -129,8 +129,8 @@ class GCSInterface(Node):
     def establish_gcs_connection(self):
         if not self.comms_config.USE_UDP:
             return mavutil.mavlink_connection(
-                self.comms_config.UART_PORT,
-                baud=self.comms_config.UART_BAUD,
+                self.comms_config.RADIO_UART_PORT,
+                baud=self.comms_config.RADIO_UART_BAUD,
                 source_system=self.comms_config.MVL_SYSID,
                 source_component=self.comms_config.MVL_COMPID
             )

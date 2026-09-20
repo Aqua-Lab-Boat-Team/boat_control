@@ -4,6 +4,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from boat_iface.msg import MissionAck, MissionItemInt, MissionCount, MissionItemReached, VehicleSupervisorState, GoalWaypoint, ManualControl, GPS
+from boat_control.data.comms_config import CommsConfig
 from boat_iface.srv import ArmDisarm, FlightModeChange
 from boat_control.Mission import Mission, MissionType
 from boat_control.data.supervisor_state_cache import SupervisorStateCache
@@ -19,8 +20,8 @@ class VehicleController(Node):
         
         self.cache = SupervisorStateCache()
 
-        self.declare_parameter("port", "/dev/ttyACM1")
-        self.declare_parameter("baudrate", 115200)
+        self.declare_parameter("port", CommsConfig.ARDUINO_UART_PORT)
+        self.declare_parameter("baudrate", CommsConfig.ARDUINO_UART_BAUD)
         port = str(self.get_parameter("port").value)
         baudrate = int(self.get_parameter("baudrate").value)
 
