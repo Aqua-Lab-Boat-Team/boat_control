@@ -163,7 +163,7 @@ class GCSInterface(Node):
             int(gps.vx),
             int(gps.vy),
             int(gps.vz),
-            int(gps.heading),
+            int(gps.heading * math.pi / 180),
         )
     
         self.master.mav.attitude_send(

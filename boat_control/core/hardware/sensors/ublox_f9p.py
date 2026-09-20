@@ -127,7 +127,7 @@ class UbloxGpsNode(Node):
             self.heading_deg = None
             return
 
-        self.heading_deg = (float(ubx_message.relPosHeading)) % 360.0
+        self.heading_deg = (float(ubx_message.relPosHeading)+90) % 360.0
 
     def handle_nav_pvt(self, ubx_message) -> None:
         fix_valid = bool(getattr(ubx_message, "gnssFixOk", 0))
