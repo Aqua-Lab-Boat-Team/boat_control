@@ -110,7 +110,7 @@ class UbloxGpsNode(Node):
         #     self.handle_gngll(ubx_message)
 
     def handle_relposned(self, ubx_message) -> None:
-        
+       
         if self.heading_mode != "relpos":
             return
 
@@ -120,12 +120,14 @@ class UbloxGpsNode(Node):
         position_valid = bool(
             getattr(ubx_message, "relPosValid", 0)
         )
-
+        self.get_logger().info(f"Heading valid {heading_valid}")
+        self.get_logger().info(f"Position valid {position_valid}")
+        
         if not heading_valid or not position_valid:
             self.heading_deg = None
             return
 
-        self.heading_deg = (float(ubx_message.relPosHeading) +90) % 360.0
+        self.heading_deg = (float(ubx_message.relPosHeading)) % 360.0
 
     def handle_nav_pvt(self, ubx_message) -> None:
         fix_valid = bool(getattr(ubx_message, "gnssFixOk", 0))
@@ -142,10 +144,12 @@ class UbloxGpsNode(Node):
         self.vy = int(ubx_message.velE / 10)
         self.vz = 0
 
+        self.get_logger().info(f"{self.lat}")
+
         
-        if self.heading_mode == "motion":
-            # Course over ground. This is not reliable while stationary.
-            self.heading_deg = float(ubx_message.headMot) % 360.0
+        # if self.heading_mode == "motion":
+        #     # Course over ground. This is not reliable while stationary.
+           # self.heading_deg = float(ubx_message.headMot) % 360.0
 
         # In relpos mode, wait until a valid NAV-RELPOSNED heading exists.
         if self.heading_deg is None:
@@ -172,6 +176,7 @@ class UbloxGpsNode(Node):
 
     def pub_gps(self) -> None:
         if (self.lat is None) or (self.long is None) or (self.heading_deg is None) or (self.vx is None) or (self.vy is None) or (self.vz is None):
+            self.get_logger().info(f"{self.lat} {self.long} {self.heading_deg} {self.vx} {self.vy} {self.vz}")
             return
         else:
             msg = GPS()

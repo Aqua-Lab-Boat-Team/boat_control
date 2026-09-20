@@ -120,6 +120,7 @@ class GCSInterface(Node):
 
         msg = self.master.recv_match(blocking=False)
         if msg is not None:
+            self.get_logger().info(f"{msg}")
             self.handle_mavlink_message(msg)
 
         # Send heartbeat periodically
@@ -302,6 +303,7 @@ class GCSInterface(Node):
 
         # QGC is asking to arm or disarm
         elif cmd == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+            self.get_logger().info(f"ARM REQUEST")
             future = self.arm_disarm_client.send_request(bool(m.param1))
             future.add_done_callback(self.arm_request_done)
             
@@ -315,6 +317,7 @@ class GCSInterface(Node):
                 command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
                 result=mavutil.mavlink.MAV_RESULT_ACCEPTED,
             )
+            self.get_logger().info(f"RCV")
         else:
             self.master.mav.command_ack_send(
                 command=mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,

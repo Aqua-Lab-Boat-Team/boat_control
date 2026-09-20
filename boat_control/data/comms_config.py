@@ -3,11 +3,13 @@ from dataclasses import dataclass
 @dataclass
 class CommsConfig:
 
-    USE_UDP:bool = True # UDP or UART -- Default to UDP
-    UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
+    USE_UDP:bool = False # UDP or UART -- Default to UDP
+    #UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
+    UDP_PORT:str = "udpout:127.0.0.1:14551" #QGCS over TCP
     # UDP_PORT:str = "udpout:192.168.10.2:14550" # Raspberry pi
 
     RADIO_UART_PORT:str = "/dev/radio"
+    # RADIO_UART_PORT:str = "/dev/ttyTHS1"
     RADIO_UART_BAUD:int = 115200
 
     GPS_UART_PORT:str = "/dev/gps"

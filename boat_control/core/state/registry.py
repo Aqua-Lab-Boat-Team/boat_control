@@ -38,9 +38,9 @@ def update_gps(state: GPSState, msg: GPS):
     state.latitude = msg.latitude
     state.longitude = msg.longitude
     state.heading = msg.heading
-    state.vx = vx
-    state.vy = vy
-    state.vz = vz
+    state.vx = msg.vx
+    state.vy = msg.vy
+    state.vz = msg.vz
 
 
 STATE_REGISTRY = {
