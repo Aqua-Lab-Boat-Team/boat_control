@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class CommsConfig:
 
-    USE_UDP:bool = False # UDP or UART -- Default to UDP
+    USE_UDP:bool = True # UDP or UART -- Default to UDP
     #UDP_PORT:str = "udpout:192.168.55.100:14550" # Jetson
     UDP_PORT:str = "udpout:127.0.0.1:14551" #QGCS over TCP
     # UDP_PORT:str = "udpout:192.168.10.2:14550" # Raspberry pi
@@ -22,4 +22,5 @@ class CommsConfig:
     MVL_COMPID:int = 1
     GCS_SYSID:int = 255
     HB_INTERVAL:float = 1.0          # send heartbeat every 1 second
-    SYS_STAT_INTERVAL:float = 0.1    # send status every 0.1 second
+    SYS_STAT_INTERVAL:float = 0.5    # send status at 2 Hz
+    POSITION_ATT_INTERVAL:float = 0.1  # send position and attitude at 10 Hz

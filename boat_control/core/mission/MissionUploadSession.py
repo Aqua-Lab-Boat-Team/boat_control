@@ -12,6 +12,8 @@ class MissionUploadSession:
         self.is_waiting = False
         self.t_last_transmit = 0
         self.mission_item_list = []
+        self.remote_sysid = 0
+        self.remote_compid = 0
 
     def add_mission_item(self, mission_item: MissionItem):
         self.retry_count = 0
@@ -25,9 +27,11 @@ class MissionUploadSession:
     def is_active(self):
         return self.upload_active
 
-    def begin_new_upload(self, num_items:int):
+    def begin_new_upload(self, num_items:int, remote_sysid:int, remote_compid:int):
         self.upload_active = True
         self.num_mission_items = num_items
+        self.remote_sysid = remote_sysid
+        self.remote_compid = remote_compid
     
     def reset(self):
         self.nums_mission_items = 0
@@ -37,5 +41,7 @@ class MissionUploadSession:
         self.is_waiting = False
         self.t_last_transmit = -1
         self.mission_item_list = []
+        self.remote_sysid = 0
+        self.remote_compid = 0
 
     

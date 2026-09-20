@@ -99,6 +99,7 @@ class GCSInterface(Node):
 
         self.t_last_hb = now_s()
         self.t_last_sys = now_s()
+        self.t_last_position_att = now_s()
         self.timer = self.create_timer(0.01, self.loop)
 
     def establish_gcs_connection(self):
@@ -120,7 +121,6 @@ class GCSInterface(Node):
 
         msg = self.master.recv_match(blocking=False)
         if msg is not None:
-            self.get_logger().info(f"{msg}")
             self.handle_mavlink_message(msg)
 
         # Send heartbeat periodically
@@ -131,10 +131,14 @@ class GCSInterface(Node):
             self.send_heartbeat(self.master)
             self.t_last_hb = t
 
-        # Send status + attitude periodically
+        # Send system status periodically
         if (t - self.t_last_sys) >= self.comms_config.SYS_STAT_INTERVAL:
-            self.send_sys_status_and_att(self.master)
+            self.send_sys_status(self.master)
             self.t_last_sys = t
+
+        if (t - self.t_last_position_att) >= self.comms_config.POSITION_ATT_INTERVAL:
+            self.send_position_and_attitude()
+            self.t_last_position_att = t
 
         # Retry message transmit
         if (self.mission_upload_sess.is_waiting):
@@ -147,6 +151,7 @@ class GCSInterface(Node):
                     print("MISSION UPLOAD TIMEOUT")
                     self.mission_upload_sess.reset()
 
+    def send_position_and_attitude(self):
         gps = self.state.get(GPSState)
         
         self.master.mav.global_position_int_send(
@@ -236,14 +241,17 @@ class GCSInterface(Node):
         # )
 
     def handle_mission_count(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile) -> None:
-        
+        self.get_logger().info("GOT MISSION ITEM COUNT")
         if not self.mission_upload_sess.is_active():
-            self.mission_upload_sess.begin_new_upload(_m.count)
+            sysid = _m.get_srcSystem()
+            compid = _m.get_srcComponent()
+            self.mission_upload_sess.begin_new_upload(_m.count, sysid, compid)
 
         self.send_mission_request_int(master)
 
     def handle_mission_item_int(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         # Process the mission item
+        self.get_logger().info("GOT MISSION ITEM INT")
         mission_item = MissionItem.message_to_mission_item(_m) # Parse the mission item into an object
         self.mission_upload_sess.add_mission_item(mission_item) # Add the mission item to the current list
 
@@ -330,10 +338,10 @@ class GCSInterface(Node):
         """
         
         # If we haven't seen all the items yet, ask for the next
-        print(f"REQUESTING {self.mission_upload_sess.last_rec_item + 1}")
+        self.get_logger().info("Sending mission request int")
         master.mav.mission_request_int_send(
-            target_system=self.comms_config.MVL_SYSID,
-            target_component=self.comms_config.MVL_COMPID,
+            target_system=self.mission_upload_sess.remote_sysid,
+            target_component=self.mission_upload_sess.remote_compid,
             seq=self.mission_upload_sess.last_rec_item + 1
         )
         self.mission_upload_sess.is_waiting = True # Flag that mission upload is awaiting a response
@@ -341,8 +349,8 @@ class GCSInterface(Node):
 
     def send_mission_ack(self, _m: mavutil.mavlink.MAVLink_message, master: mavutil.mavfile):
         master.mav.mission_ack_send(
-                target_system=self.comms_config.MVL_SYSID,
-                target_component=self.comms_config.MVL_COMPID,
+                target_system=self.mission_upload_sess.remote_sysid,
+                target_component=self.mission_upload_sess.remote_compid,
                 type=0
             )
 
@@ -367,9 +375,9 @@ class GCSInterface(Node):
             system_status=mavutil.mavlink.MAV_STATE_ACTIVE
         )
 
-    def send_sys_status_and_att(self, master: mavutil.mavfile) -> None:
+    def send_sys_status(self, master: mavutil.mavfile) -> None:
         """
-        Periodically send SYS_STATUS and ATTITUDE_QUATERNION.
+        Periodically send SYS_STATUS.
         This helps QGC display telemetry from your system.
         """
         global sys_stat_count
