@@ -1,0 +1,19 @@
+{
+  "simulation": {"duration_s": 20.0, "dt_s": 0.02},
+  "initial": {"east_m": 0.0, "north_m": 0.0, "heading_deg": 0.0,
+              "forward_mps": 0.0, "yaw_rate_deg_s": 0.0},
+  "operation": {"armed": false, "mode": "HOLD"},
+  "commands": {"left": 0.5, "right": 0.5},
+  "left_motor": {"response_time_s": 0.4, "max_thrust_n": 20.0,
+                 "efficiency": 1.0, "dead_zone": 0.05, "exponent": 2.0},
+  "right_motor": {"response_time_s": 0.4, "max_thrust_n": 20.0,
+                  "efficiency": 1.0, "dead_zone": 0.05, "exponent": 2.0},
+  "dynamics": {"mass_kg": 25.0, "yaw_inertia_kg_m2": 8.0,
+               "thruster_separation_m": 0.6, "linear_drag_n_per_mps": 4.0,
+               "quadratic_drag_n_per_mps2": 8.0,
+               "yaw_drag_nm_per_rad_s": 4.0,
+               "yaw_quadratic_drag_nm_per_rad_s2": 2.0,
+               "max_acceleration_mps2": 2.0,
+               "max_yaw_acceleration_deg_s2": 90.0,
+               "max_substep_s": 0.02}
+}
