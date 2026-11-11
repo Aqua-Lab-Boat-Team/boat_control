@@ -35,6 +35,8 @@ class ThrusterPIDControl:
         # Heading controller
         goal_hdg = angle_between_coordinates(lat, lon, goal_lat, goal_lon)
         hdg_err = wrap_angle_deg(goal_hdg - hdg)
+        if abs(hdg_err) < 5:
+                hdg_err = 0
         int_hdg_err = clamp(np.sum(self.hdg_err_buff), -50, 50)
         d_hdg_err_dt = 0.0
         if self.last_ctrl_time is not None:
@@ -46,7 +48,7 @@ class ThrusterPIDControl:
             self.coeffs.ki_h * int_hdg_err + 
             self.coeffs.kd_h * d_hdg_err_dt)
 
-        hdg_ctrl = clamp(hdg_ctrl, -1, 1) # Clamping
+        hdg_ctrl = -1 * clamp(hdg_ctrl, -1, 1) # Clamping
 
         self.hdg_err_buff = np.roll(self.hdg_err_buff, 1)
         self.hdg_err_buff[0] = hdg_err

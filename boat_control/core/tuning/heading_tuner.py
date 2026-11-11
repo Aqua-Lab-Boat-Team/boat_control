@@ -25,11 +25,13 @@ class HeadingTuner(Node):
         self.long: int | None = None
         self.hdg: float | None = None
 
-        self.goal_hdg = float | None
+        self.goal_hdg: float | None = None
         self.hdg_err_buff = np.zeros(10) # Index 0 is most recent
         self.coeffs = CtrlCoeffs
         self.last_ctrl_time = None
         ###################
+
+        self.motor_controller_sim_pub = self.create_publisher(MotorPower, '/vehicle/motor_power', 10)
 
         self.gps_sub = self.create_subscription(GPS, '/vehicle/sensors/gps', self.gps_sub_cb, qos_profile_sensor_data)
         self.goal_heading_sub = self.create_subscription(HDGTest ,'/testing/goal_heading', self.goal_heading_sub, 10)
@@ -55,17 +57,20 @@ class HeadingTuner(Node):
         msg = MotorPower()
         msg.left_power = float(left_power)
         msg.right_power = float(right_power)
+
         self.motor_controller_sim_pub.publish(msg)
 
     def loop(self):
         if self.goal_hdg is not None and self.hdg is not None:
             now = time.monotonic()
             hdg_err = wrap_angle_deg(self.goal_hdg - self.hdg)
-            self.get_logger().info(f"-------")
-            self.get_logger().info(f"{time.now()}")
+            if abs(hdg_err) < 5:
+                hdg_err = 0
+            # self.get_logger().info(f"-------")
+            # self.get_logger().info(f"{time.now()}")
             self.get_logger().info(f"Heading: {self.hdg}")
-            self.get_logger().info(f"Goal Heading: {self.goal_hdg}")
-            self.get_logger().info(f"Error: {hdg_err}")
+            # self.get_logger().info(f"Goal Heading: {self.goal_hdg}")
+            # self.get_logger().info(f"Error: {hdg_err}")
 
             int_hdg_err = clamp(np.sum(self.hdg_err_buff), -50, 50)
             d_hdg_err_dt = 0.0
@@ -78,7 +83,7 @@ class HeadingTuner(Node):
                 self.coeffs.ki_h * int_hdg_err + 
                 self.coeffs.kd_h * d_hdg_err_dt)
 
-            hdg_ctrl = clamp(hdg_ctrl, -1, 1) # Clamping
+            hdg_ctrl = -1 * clamp(hdg_ctrl, -1, 1) # Clamping
 
             self.hdg_err_buff = np.roll(self.hdg_err_buff, 1)
             self.hdg_err_buff[0] = hdg_err
@@ -92,6 +97,9 @@ class HeadingTuner(Node):
             norm_factor = max(1, max(abs(left_power), abs(right_power)))
             left_power = left_power / norm_factor
             right_power = right_power / norm_factor
+
+            self.last_left = left_power
+            self.last_right = right_power
 
             self.pub_motor_command(left_power, right_power)
 

@@ -79,6 +79,8 @@ class MissionManager(Node):
     def mission_from_request(self, request):
         temp_mission = Mission()
         waypoints = [item for item in request.items]
+        for pt in waypoints:
+            self.get_logger().info(f"{pt}")
         num_items = len(waypoints)
         temp_mission.waypoints = waypoints
         temp_mission.num_items = num_items
@@ -120,15 +122,15 @@ class MissionManager(Node):
         goal_waypoint = GoalWaypoint()
         goal_waypoint.x = current_waypoint.x
         goal_waypoint.y = current_waypoint.y
-        # self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
+        self.get_logger().info(f'WAYPOINT: {self.mission.current_item}')
         #self.get_logger().info(f'GOAL LAT: {format(goal_waypoint.x / 1e7, ".12f")}, LON: {format(goal_waypoint.y / 1e7, ".12f")} ')
 
         ### TEST ####
-        # self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
+        self.get_logger().info(f'Distance: {distance_between_coordinates(goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, self.lat, self.long)}')
         #############
         
-        if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, 2):
-            if not (self.mission.current_item >= self.mission.num_items - 1):
+        if goal_is_reached(self.lat, self.long, goal_waypoint.x / 1e7, goal_waypoint.y / 1e7, 1):
+            if not (self.mission.current_item >= self.mission.num_items):
                 self.mission.current_item += 1
 
         self.goal_waypoint_pub.publish(goal_waypoint)

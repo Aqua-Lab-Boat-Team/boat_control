@@ -94,8 +94,27 @@ class VehicleController(Node):
                     pass
                 case FlightMode.MANUAL:
                     # Execute manual commands
-                    left_power = map(self.z, 0, 1000, -1, 1)
-                    right_power = map(self.x, -1000, 1000, -1, 1)
+
+                    # PS4 Controller Mapping
+                    # left_power = map(self.z, 0, 1000, -1, 1)
+                    # right_power = map(self.x, -1000, 1000, -1, 1)
+
+
+
+                    # Left: z -1000 -> 1000
+                    # Right: x -1000 -> 1000
+                    # Turn: y -1000 -> 1000
+                    # Virtual joystick controller mapping
+
+                    forward = self.x
+                    turn = self.y
+
+                    left_power = forward + turn
+                    right_power = forward - turn
+
+                    left_power = map(left_power, -2000, 2000, -1, 1)
+                    right_power = map(right_power, -2000, 2000, -1, 1)
+                    self.get_logger().info(f"x:{self.x}, y:{self.y}, z:{self.z}, r: {self.r}")
 
                     self.pub_motor_command(left_power, right_power)
                     

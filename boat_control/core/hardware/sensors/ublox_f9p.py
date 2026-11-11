@@ -120,8 +120,6 @@ class UbloxGpsNode(Node):
         position_valid = bool(
             getattr(ubx_message, "relPosValid", 0)
         )
-        self.get_logger().info(f"Heading valid {heading_valid}")
-        self.get_logger().info(f"Position valid {position_valid}")
         
         if not heading_valid or not position_valid:
             self.heading_deg = None
@@ -143,9 +141,6 @@ class UbloxGpsNode(Node):
         self.vx = int(ubx_message.velN / 10)
         self.vy = int(ubx_message.velE / 10)
         self.vz = 0
-
-        self.get_logger().info(f"{self.lat}")
-
         
         # if self.heading_mode == "motion":
         #     # Course over ground. This is not reliable while stationary.
@@ -176,7 +171,6 @@ class UbloxGpsNode(Node):
 
     def pub_gps(self) -> None:
         if (self.lat is None) or (self.long is None) or (self.heading_deg is None) or (self.vx is None) or (self.vy is None) or (self.vz is None):
-            self.get_logger().info(f"{self.lat} {self.long} {self.heading_deg} {self.vx} {self.vy} {self.vz}")
             return
         else:
             msg = GPS()

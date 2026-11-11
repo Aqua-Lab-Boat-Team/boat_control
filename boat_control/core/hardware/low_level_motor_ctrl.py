@@ -39,7 +39,7 @@ class LowLevelMotorControl(Node):
         self.motor_power_subscriber = self.create_subscription(MotorPower, '/vehicle/motor_power', self.motor_power_cb, 10)
 
     def motor_power_cb(self, msg):
-        self.get_logger().info("CB CALLBACK")
+        # self.get_logger().info("CB CALLBACK")
         # Collect from message
         left_power = msg.left_power
         right_power = msg.right_power
@@ -53,11 +53,11 @@ class LowLevelMotorControl(Node):
         right_power = int_map(right_power, -1, 1, -128, 127)
         
         command = f"{left_power} {right_power}\n"
-        self.get_logger().debug(command)
+        # self.get_logger().debug(command)
         self.write_to_controller(command)
 
     def write_to_controller(self, command: str):
-        self.get_logger().info(command)
+        # self.get_logger().info(command)
         self.serial_port.write(command.encode("ascii"))
 
     def destroy_node(self) -> None:

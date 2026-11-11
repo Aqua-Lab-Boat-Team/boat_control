@@ -40,10 +40,14 @@ def generate_launch_description():
             package='boat_control',
             executable='vehicle_controller',
         ),
-        # Node(
-        #     package='boat_control',
-        #     executable='low_level_motor_controller'
-        # ),
+        Node(
+            package='boat_control',
+            executable='low_level_motor_controller'
+        ),
+        Node(
+            package='boat_control',
+            executable='gps'
+        ),
         Node(
             package='boat_control',
             executable='sim_gps',
