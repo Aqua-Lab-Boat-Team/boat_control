@@ -1,15 +1,19 @@
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 package_name = 'boat_control'
 
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=find_namespace_packages(
+        include=[package_name, package_name + '.*'],
+        exclude=['*.__pycache__'],
+    ),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', ['launch/boat_control_launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
